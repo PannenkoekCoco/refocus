@@ -23,3 +23,11 @@ def test_project_exposes_dev_tools_as_an_installable_extra() -> None:
         "respx>=0.22,<1",
     ]
     assert "dependency-groups" not in metadata
+
+
+def test_project_packages_the_router_subpackage_for_noneditable_installs() -> None:
+    pyproject = Path(__file__).parents[1] / "pyproject.toml"
+    metadata = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+
+    packages = set(metadata["tool"]["setuptools"]["packages"])
+    assert {"app", "app.routers"} <= packages
