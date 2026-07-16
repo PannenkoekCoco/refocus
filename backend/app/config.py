@@ -8,6 +8,25 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://learning:learning_local_only@127.0.0.1:5432/learning_companion"
 DEFAULT_APP_ORIGIN = "http://127.0.0.1:8000"
+MINIMUM_PRODUCTION_SESSION_SECRET_LENGTH = 32
+MAX_REPEATED_SESSION_SECRET_PATTERN_LENGTH = 4
+KNOWN_NON_PRODUCTION_SESSION_SECRETS = frozenset(
+    {
+        "development-only-replace-before-deploy",
+        "ci-session-secret-only",
+        "ci-session-secret-only-not-for-production",
+    }
+)
+
+
+def has_short_repeated_pattern(value: str) -> bool:
+    """Reject only obvious, whole-secret repetitions without restricting generated formats."""
+    max_pattern_length = min(MAX_REPEATED_SESSION_SECRET_PATTERN_LENGTH, len(value) // 2)
+    return any(
+        len(value) % pattern_length == 0
+        and value == value[:pattern_length] * (len(value) // pattern_length)
+        for pattern_length in range(1, max_pattern_length + 1)
+    )
 
 
 class Settings(BaseSettings):
@@ -55,14 +74,20 @@ class Settings(BaseSettings):
 
     @property
     def github_is_configured(self) -> bool:
-        return all(
-            (
-                self.github_app_id,
-                self.github_client_id,
-                self.github_client_secret.get_secret_value() if self.github_client_secret else None,
-                self.github_private_key.get_secret_value() if self.github_private_key else None,
-            )
+        return all(self._github_credential_values())
+
+    def _github_credential_values(self) -> tuple[str, str, str, str]:
+        return (
+            (self.github_app_id or "").strip(),
+            (self.github_client_id or "").strip(),
+            (self.github_client_secret.get_secret_value() if self.github_client_secret else "").strip(),
+            (self.github_private_key.get_secret_value() if self.github_private_key else "").strip(),
         )
+
+    @property
+    def github_configuration_is_partial(self) -> bool:
+        credential_values = self._github_credential_values()
+        return any(credential_values) and not all(credential_values)
 
     @model_validator(mode="after")
     def production_settings_are_safe_to_deploy(self) -> "Settings":
@@ -81,12 +106,16 @@ class Settings(BaseSettings):
         if not self.database_url.startswith("postgresql+psycopg://") or self.database_url == DEFAULT_DATABASE_URL:
             raise ValueError("DATABASE_URL must point to the managed PostgreSQL database in production")
         session_secret = self.session_secret.get_secret_value() if self.session_secret else ""
-        if len(session_secret) < 32:
-            raise ValueError("SESSION_SECRET must be at least 32 characters in production")
+        if (
+            len(session_secret) < MINIMUM_PRODUCTION_SESSION_SECRET_LENGTH
+            or session_secret.strip().casefold() in KNOWN_NON_PRODUCTION_SESSION_SECRETS
+            or has_short_repeated_pattern(session_secret)
+        ):
+            raise ValueError("SESSION_SECRET must be a safely generated value in production")
         if self.session_cookie_secure is False:
             raise ValueError("SESSION_COOKIE_SECURE cannot be disabled in production")
-        if not self.github_is_configured:
-            raise ValueError("GitHub App credentials and private key are required in production")
+        if self.github_configuration_is_partial:
+            raise ValueError("GitHub configuration is incomplete in production")
         return self
 
     @property

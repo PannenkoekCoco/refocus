@@ -2,6 +2,7 @@ name: refocus
 
 x-app-environment: &app-environment
   DATABASE_URL: postgresql+psycopg://learning:learning_local_only@postgres:5432/learning_companion
+  # Development only: production validation rejects this committed placeholder.
   SESSION_SECRET: development-only-replace-before-deploy
   APP_ENVIRONMENT: development
   APP_ORIGIN: http://127.0.0.1:8000

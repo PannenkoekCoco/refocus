@@ -1,7 +1,9 @@
 import io
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
+from secrets import token_hex, token_urlsafe
 from uuid import UUID
 
 from fastapi import Request
@@ -21,7 +23,7 @@ def production_settings(**overrides: object) -> Settings:
         "app_environment": "production",
         "app_origin": "https://learn.refocus.example",
         "database_url": "postgresql+psycopg://refocus:password@managed-db.example/refocus",
-        "session_secret": "a" * 48,
+        "session_secret": token_urlsafe(32),
         "github_app_id": "12345",
         "github_client_id": "github-client-id",
         "github_client_secret": "github-client-secret",
@@ -197,7 +199,7 @@ async def test_security_headers_cover_the_static_app_without_blocking_local_tts(
     assert "Strict-Transport-Security" not in response.headers
 
 
-def test_production_settings_require_tls_database_secret_and_github_credentials() -> None:
+def test_production_settings_require_tls_database_secret_and_secure_cookies() -> None:
     settings = production_settings()
 
     assert settings.github_callback_url == "https://learn.refocus.example/api/auth/github/callback"
@@ -207,11 +209,68 @@ def test_production_settings_require_tls_database_secret_and_github_credentials(
         {"app_origin": "http://learn.refocus.example"},
         {"database_url": "sqlite+aiosqlite:///./refocus.db"},
         {"session_secret": "too-short"},
-        {"github_private_key": None},
         {"session_cookie_secure": False},
     ):
         with pytest.raises(ValidationError):
             production_settings(**overrides)
+
+
+@pytest.mark.parametrize(
+    "new_secret_factory",
+    (token_urlsafe, token_hex),
+    ids=("urlsafe", "hex"),
+)
+def test_production_settings_accept_generated_urlsafe_and_hex_session_secrets(
+    new_secret_factory: Callable[[int], str],
+) -> None:
+    settings = production_settings(session_secret=new_secret_factory(32))
+
+    assert settings.secure_session_cookie is True
+
+
+@pytest.mark.parametrize(
+    "unsafe_secret",
+    (
+        "development-only-replace-before-deploy",
+        "ci-session-secret-only",
+        "ci-session-secret-only-not-for-production",
+        "a" * 48,
+        "abcd" * 12,
+    ),
+)
+def test_production_settings_reject_known_or_repeated_session_secrets(unsafe_secret: str) -> None:
+    with pytest.raises(ValidationError, match="SESSION_SECRET must be a safely generated value") as error:
+        production_settings(session_secret=unsafe_secret)
+
+    assert unsafe_secret not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "partial_github_settings",
+    (
+        {"github_app_id": "12345"},
+        {"github_client_id": "test-client-id"},
+        {"github_client_secret": "partial-test-client-secret"},
+        {"github_private_key": "partial-test-private-key"},
+    ),
+)
+def test_production_settings_make_github_optional_but_reject_partial_configuration(
+    partial_github_settings: dict[str, str],
+) -> None:
+    disabled_github_settings = {
+        "github_app_id": None,
+        "github_client_id": None,
+        "github_client_secret": None,
+        "github_private_key": None,
+    }
+    disabled_github = production_settings(**disabled_github_settings)
+
+    assert disabled_github.github_is_configured is False
+
+    with pytest.raises(ValidationError, match="GitHub configuration is incomplete in production") as error:
+        production_settings(**(disabled_github_settings | partial_github_settings))
+
+    assert next(iter(partial_github_settings.values())) not in str(error.value)
 
 
 def test_container_and_ci_configuration_keep_runtime_secrets_and_access_logs_out_of_the_image() -> None:

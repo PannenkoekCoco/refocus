@@ -12,7 +12,7 @@ For local container development, Docker Compose starts PostgreSQL, runs the one-
 docker compose up --build
 ```
 
-The Compose credentials are development-only placeholders. Docker Desktop is required for this command; it is not a substitute for a production deployment.
+The Compose credentials are development-only placeholders. Production startup rejects the committed session placeholder, so Docker Desktop is required for this command and it is not a substitute for a production deployment.
 
 ## Production deployment checklist
 
@@ -20,8 +20,8 @@ Deployment intentionally waits for a user-selected Docker-compatible provider an
 
 - Provision managed PostgreSQL and set `DATABASE_URL` to its `postgresql+psycopg://` connection URL. Do not use the local Compose database or SQLite.
 - Set `APP_ENVIRONMENT=production`, use an HTTPS root `APP_ORIGIN` (for example `https://learn.example.com`), and terminate TLS at the chosen provider or a configured edge.
-- Set a unique, high-entropy `SESSION_SECRET`; production cookies are HttpOnly, `SameSite=Lax`, and Secure.
-- Create/configure the GitHub App with the exact callback URL `${APP_ORIGIN}/api/auth/github/callback`, then set `GITHUB_APP_ID`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `GITHUB_PRIVATE_KEY` as provider secrets. Keep the read-only permissions described below and do not enable webhooks.
+- Set a unique, high-entropy `SESSION_SECRET` from a secret generator; production requires at least 32 characters and rejects the repository's development/CI placeholders plus obvious repeated patterns. That validation is a safety net, not a substitute for generating a real secret. Production cookies are HttpOnly, `SameSite=Lax`, and Secure.
+- GitHub verification is optional. Leave every `GITHUB_*` value unset to deploy the core learning app without it; `/api/auth/github/login` then safely returns `github_not_configured`. To enable verification, configure the GitHub App with the exact callback URL `${APP_ORIGIN}/api/auth/github/callback`, then set all of `GITHUB_APP_ID`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `GITHUB_PRIVATE_KEY` together as provider secrets. Production rejects partial GitHub configuration. Keep the read-only permissions described below and do not enable webhooks.
 - Run `alembic upgrade head` once as the provider's pre-deploy migration step against the managed database, before web instances scale up. Do not run migrations on every web boot.
 - Deploy the Docker image with its default web command, configure the provider health check for `GET /health`, and verify it returns `200` with `{"status":"ok"}` after release.
 - Configure edge/WAF request limits and query-string redaction for operational logs. Refocus does not claim to provide a process-local production rate limiter.

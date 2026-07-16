@@ -1,5 +1,11 @@
-from httpx import AsyncClient
+from secrets import token_urlsafe
+
+from httpx import ASGITransport, AsyncClient
+from pydantic import SecretStr
 import pytest
+
+from app.config import Settings
+from app.main import create_app
 
 @pytest.mark.asyncio
 async def test_me_is_safe_for_anonymous_learners(client: AsyncClient) -> None:
@@ -34,6 +40,29 @@ async def test_logout_revokes_the_server_side_session(authenticated_client: Asyn
 @pytest.mark.asyncio
 async def test_github_login_is_guarded_until_all_app_settings_exist(client: AsyncClient) -> None:
     response = await client.get("/api/auth/github/login")
+
+    assert response.status_code == 503
+    assert response.json() == {"code": "github_not_configured"}
+
+
+@pytest.mark.asyncio
+async def test_github_login_remains_safely_disabled_when_production_omits_all_github_settings() -> None:
+    app = create_app(
+        Settings(
+            app_environment="production",
+            app_origin="https://learn.refocus.example",
+            database_url="postgresql+psycopg://refocus:password@managed-db.example/refocus",
+            session_secret=SecretStr(token_urlsafe(32)),
+        )
+    )
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="https://learn.refocus.example",
+        ) as production_client:
+            response = await production_client.get("/api/auth/github/login")
+    finally:
+        await app.state.database_engine.dispose()
 
     assert response.status_code == 503
     assert response.json() == {"code": "github_not_configured"}

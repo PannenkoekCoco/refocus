@@ -1,3 +1,5 @@
+from secrets import token_urlsafe
+
 from fastapi import Response
 
 from app.config import Settings
@@ -13,7 +15,7 @@ def production_settings(**overrides: object) -> Settings:
         "app_environment": "production",
         "app_origin": "https://learn.refocus.example",
         "database_url": "postgresql+psycopg://refocus:password@managed-db.example/refocus",
-        "session_secret": "a" * 48,
+        "session_secret": token_urlsafe(32),
         "github_app_id": "12345",
         "github_client_id": "github-client-id",
         "github_client_secret": "github-client-secret",
