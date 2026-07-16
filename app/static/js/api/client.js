@@ -1,33 +1,16 @@
-import {
-  loadLearningState,
-  persistLearningState,
-} from "../state/store.js";
-
 export const PENDING_PROGRESS_MESSAGE = "Saved locally; sign in or retry to sync.";
 export const LOCAL_PROGRESS_UNAVAILABLE_MESSAGE = "Progress could not be saved locally. It is available for this session only.";
-
-function defaultStorage() {
-  try {
-    return globalThis.localStorage;
-  } catch {
-    return null;
-  }
-}
 
 function newAttemptId() {
   return globalThis.crypto?.randomUUID?.();
 }
 
-function appendPendingProgress(storage, record) {
-  const state = loadLearningState(storage);
-  const sameRecord = (candidate) => candidate.kind === record.kind
-    && candidate.payload.attemptId
-    && candidate.payload.attemptId === record.payload.attemptId;
-  const pendingProgress = [
-    ...(state.pendingProgress ?? []).filter((candidate) => !sameRecord(candidate)),
-    record,
-  ];
-  return persistLearningState(storage, { ...state, pendingProgress });
+function queuePendingRecord(queuePendingProgress, record) {
+  try {
+    return queuePendingProgress(record) === true;
+  } catch {
+    return false;
+  }
 }
 
 function announcePendingPersistence(onPending, persisted) {
@@ -36,7 +19,7 @@ function announcePendingPersistence(onPending, persisted) {
 
 export function createProgressClient({
   fetchImpl = globalThis.fetch?.bind(globalThis),
-  storage = defaultStorage(),
+  queuePendingProgress = () => false,
   onPending = () => {},
 } = {}) {
   async function saveQuizAttempt(attempt) {
@@ -57,7 +40,7 @@ export function createProgressClient({
     } catch {
       announcePendingPersistence(
         onPending,
-        appendPendingProgress(storage, { kind: "quizAttempt", payload }),
+        queuePendingRecord(queuePendingProgress, { kind: "quizAttempt", payload }),
       );
       return null;
     }
@@ -77,7 +60,7 @@ export function createProgressClient({
     } catch {
       announcePendingPersistence(
         onPending,
-        appendPendingProgress(storage, { kind: "topicProgress", payload: { topicId, status } }),
+        queuePendingRecord(queuePendingProgress, { kind: "topicProgress", payload: { topicId, status } }),
       );
       return null;
     }

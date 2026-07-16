@@ -73,6 +73,22 @@ function normalisePendingProgress(value) {
   });
 }
 
+function queuePendingProgress(state, record) {
+  const [pendingRecord] = normalisePendingProgress([record]);
+  if (!pendingRecord) return state;
+
+  const isSameAttempt = (candidate) => candidate.kind === pendingRecord.kind
+    && candidate.payload.attemptId
+    && candidate.payload.attemptId === pendingRecord.payload.attemptId;
+  return {
+    ...state,
+    pendingProgress: [
+      ...(state.pendingProgress ?? []).filter((candidate) => !isSameAttempt(candidate)),
+      pendingRecord,
+    ],
+  };
+}
+
 export function normaliseLearningState(value) {
   if (!isRecord(value)) return { ...EMPTY_LEARNING_STATE };
 
@@ -132,6 +148,8 @@ function reduce(state, action) {
         ...state,
         quizAttempts: { ...state.quizAttempts, [action.topicId]: action.attempt },
       };
+    case "queuePendingProgress":
+      return queuePendingProgress(state, action.record);
     case "saveMission":
       return {
         ...state,

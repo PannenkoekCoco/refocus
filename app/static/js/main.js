@@ -62,14 +62,21 @@ function renderLoading(message) {
 
 const storage = getBrowserStorage();
 const store = createStore(loadLearningState(storage));
-const progressClient = createProgressClient({
-  storage,
-  fetchImpl: window.fetch.bind(window),
-  onPending: statusMessage.announce,
-});
 let latestPersistenceSucceeded = true;
 store.subscribe((state) => {
   latestPersistenceSucceeded = persistLearningState(storage, state);
+});
+
+function queuePendingProgress(record) {
+  const previousState = store.getState();
+  const nextState = store.dispatch({ type: "queuePendingProgress", record });
+  return nextState !== previousState && latestPersistenceSucceeded;
+}
+
+const progressClient = createProgressClient({
+  fetchImpl: window.fetch.bind(window),
+  queuePendingProgress,
+  onPending: statusMessage.announce,
 });
 
 function dispatchLearningState(action, savedMessage) {

@@ -4,7 +4,12 @@ import {
   PENDING_PROGRESS_MESSAGE,
   createProgressClient,
 } from "../static/js/api/client.js";
-import { LEARNING_ROUTE_STORAGE_KEY } from "../static/js/state/store.js";
+import {
+  LEARNING_ROUTE_STORAGE_KEY,
+  createStore,
+  loadLearningState,
+  persistLearningState,
+} from "../static/js/state/store.js";
 
 function createStorage(initialValue = null) {
   const values = new Map();
@@ -12,6 +17,21 @@ function createStorage(initialValue = null) {
   return {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, value),
+  };
+}
+
+function createStateBackedQueue(storage) {
+  const store = createStore(loadLearningState(storage));
+  let latestPersistenceSucceeded = true;
+  store.subscribe((state) => {
+    latestPersistenceSucceeded = persistLearningState(storage, state);
+  });
+  return {
+    store,
+    queuePendingProgress(record) {
+      store.dispatch({ type: "queuePendingProgress", record });
+      return latestPersistenceSucceeded;
+    },
   };
 }
 
@@ -24,9 +44,10 @@ const attempt = {
 test("a failed progress save keeps a narrow pending record and exposes the sync message", async () => {
   const storage = createStorage({ pinnedTopicId: "apis" });
   const messages = [];
+  const { queuePendingProgress } = createStateBackedQueue(storage);
   const client = createProgressClient({
     fetchImpl: async () => { throw new TypeError("offline"); },
-    storage,
+    queuePendingProgress,
     onPending: (message) => messages.push(message),
   });
 
@@ -40,15 +61,32 @@ test("a failed progress save keeps a narrow pending record and exposes the sync 
   assert.equal("session" in persisted, false);
 });
 
+test("a queued offline save survives a later ordinary learning-state update", async () => {
+  const storage = createStorage({ pinnedTopicId: "apis" });
+  const { store, queuePendingProgress } = createStateBackedQueue(storage);
+  const client = createProgressClient({
+    fetchImpl: async () => { throw new TypeError("offline"); },
+    queuePendingProgress,
+  });
+
+  await client.saveQuizAttempt(attempt);
+  store.dispatch({ type: "pin", topicId: "sql" });
+
+  const persisted = JSON.parse(storage.getItem(LEARNING_ROUTE_STORAGE_KEY));
+  assert.deepEqual(persisted.pendingProgress, [{ kind: "quizAttempt", payload: attempt }]);
+  assert.equal(persisted.pinnedTopicId, "sql");
+});
+
 test("a failed progress save does not claim a local sync record when storage rejects it", async () => {
   const messages = [];
   const storage = {
     getItem: () => null,
     setItem: () => { throw new Error("storage blocked"); },
   };
+  const { queuePendingProgress } = createStateBackedQueue(storage);
   const client = createProgressClient({
     fetchImpl: async () => { throw new TypeError("offline"); },
-    storage,
+    queuePendingProgress,
     onPending: (message) => messages.push(message),
   });
 
@@ -86,13 +124,14 @@ test("a quiz attempt is saved before a caller refreshes recommendations", async 
 
 test("a failed quiz save records local pending progress before refreshing recommendations", async () => {
   const storage = createStorage();
+  const { queuePendingProgress } = createStateBackedQueue(storage);
   let rejectSave;
   let refreshCalls = 0;
   const client = createProgressClient({
     fetchImpl: () => new Promise((resolve, reject) => {
       rejectSave = reject;
     }),
-    storage,
+    queuePendingProgress,
   });
 
   const completion = client.saveQuizAttemptAndRefresh(attempt, async () => {
