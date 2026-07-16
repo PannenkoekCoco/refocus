@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "missions": [
+    {
+      "id": "api-service-v1",
+      "topicId": "apis",
+      "title": "Ship a small API service",
+      "speechText": "Build a small API service with a deliberate contract.",
+      "evidence": {
+        "requiredFiles": [
+          "backend/app/main.py",
+          "README.md"
+        ],
+        "requirePullRequest": true,
+        "requirePassingChecks": true,
+        "requireDeploymentUrl": false
+      }
+    }
+  ]
+}

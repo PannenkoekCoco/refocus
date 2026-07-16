@@ -1,0 +1,123 @@
+{
+  "topicId": "ship-secure-backend",
+  "title": "Ship a secure backend baseline",
+  "speechText": "Ship a secure backend baseline. Combine a repeatable container, safe deployment configuration, authentication, permissions, and useful logging.",
+  "sections": [
+    {
+      "id": "repeatable-container",
+      "title": "Package the service repeatably",
+      "body": "A container definition states the runtime, dependencies, and startup command in source control. Build the same image from the same revision, keep its contents narrow, and run the service with the least privilege it needs.",
+      "speechText": "Package the service repeatably. A container definition states the runtime, dependencies, and startup command in source control. Build the same image from the same revision, keep its contents narrow, and run the service with the least privilege it needs."
+    },
+    {
+      "id": "safe-deployment-configuration",
+      "title": "Separate deployment configuration from code",
+      "body": "Keep environment-specific values such as database addresses and secrets out of the image and repository. Document the required configuration, validate it at startup, and expose a small health signal that does not disclose private data.",
+      "speechText": "Separate deployment configuration from code. Keep environment-specific values such as database addresses and secrets out of the image and repository. Document the required configuration, validate it at startup, and expose a small health signal that does not disclose private data."
+    },
+    {
+      "id": "identity-ownership-observation",
+      "title": "Protect identity, ownership, and observability",
+      "body": "Authentication establishes who is making a request; authorization decides whether that identity may act on this resource. Record structured, privacy-safe events so a team can investigate behavior without putting credentials or personal content into logs.",
+      "speechText": "Protect identity, ownership, and observability. Authentication establishes who is making a request; authorization decides whether that identity may act on this resource. Record structured, privacy-safe events so a team can investigate behavior without putting credentials or personal content into logs."
+    }
+  ],
+  "questions": [
+    {
+      "id": "container-purpose",
+      "prompt": "What is the main value of a container definition for a backend service?",
+      "speechText": "What is the main value of a container definition for a backend service? Option A, it makes all code secure automatically. Option B, it records a repeatable runtime and startup environment. Option C, it replaces tests. Option D, it stores production passwords in the image.",
+      "options": [
+        {
+          "id": "a",
+          "text": "It makes all code secure automatically.",
+          "speechText": "It makes all code secure automatically."
+        },
+        {
+          "id": "b",
+          "text": "It records a repeatable runtime and startup environment.",
+          "speechText": "It records a repeatable runtime and startup environment."
+        },
+        {
+          "id": "c",
+          "text": "It replaces tests.",
+          "speechText": "It replaces tests."
+        },
+        {
+          "id": "d",
+          "text": "It stores production passwords in the image.",
+          "speechText": "It stores production passwords in the image."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "A container helps a service run consistently across environments, but it still needs tests, secure configuration, and careful runtime permissions.",
+      "explanationSpeechText": "A container helps a service run consistently across environments, but it still needs tests, secure configuration, and careful runtime permissions."
+    },
+    {
+      "id": "authentication-and-authorization",
+      "prompt": "Which statement correctly separates authentication from authorization?",
+      "speechText": "Which statement correctly separates authentication from authorization? Option A, authentication decides resource ownership and authorization verifies a password. Option B, authentication establishes identity and authorization checks permitted actions. Option C, both terms mean encrypting a request. Option D, authorization is only needed for administrators.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Authentication decides resource ownership and authorization verifies a password.",
+          "speechText": "Authentication decides resource ownership and authorization verifies a password."
+        },
+        {
+          "id": "b",
+          "text": "Authentication establishes identity and authorization checks permitted actions.",
+          "speechText": "Authentication establishes identity and authorization checks permitted actions."
+        },
+        {
+          "id": "c",
+          "text": "Both terms mean encrypting a request.",
+          "speechText": "Both terms mean encrypting a request."
+        },
+        {
+          "id": "d",
+          "text": "Authorization is only needed for administrators.",
+          "speechText": "Authorization is only needed for administrators."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "A service must first know who the requester is, then consistently enforce whether that identity may read or change the requested resource.",
+      "explanationSpeechText": "A service must first know who the requester is, then consistently enforce whether that identity may read or change the requested resource."
+    },
+    {
+      "id": "safe-logging",
+      "prompt": "Which event is safest to include in a structured request log?",
+      "speechText": "Which event is safest to include in a structured request log? Option A, the full authorization token. Option B, a request identifier, route, status, and duration. Option C, the user password after hashing. Option D, every request body by default.",
+      "options": [
+        {
+          "id": "a",
+          "text": "The full authorization token.",
+          "speechText": "The full authorization token."
+        },
+        {
+          "id": "b",
+          "text": "A request identifier, route, status, and duration.",
+          "speechText": "A request identifier, route, status, and duration."
+        },
+        {
+          "id": "c",
+          "text": "The user password after hashing.",
+          "speechText": "The user password after hashing."
+        },
+        {
+          "id": "d",
+          "text": "Every request body by default.",
+          "speechText": "Every request body by default."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "Those fields support correlation and performance investigation without recording secrets or a broad copy of user-provided content.",
+      "explanationSpeechText": "Those fields support correlation and performance investigation without recording secrets or a broad copy of user-provided content."
+    }
+  ],
+  "starterAction": {
+    "id": "package-protected-service",
+    "title": "Package a protected service",
+    "description": "Create a minimal container definition, list required environment variables in a local example file, protect one resource by ownership, and add one privacy-safe request log event.",
+    "speechText": "Package a protected service. Create a minimal container definition, list required environment variables in a local example file, protect one resource by ownership, and add one privacy-safe request log event."
+  }
+}

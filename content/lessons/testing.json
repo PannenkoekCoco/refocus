@@ -1,0 +1,123 @@
+{
+  "topicId": "testing",
+  "title": "Testing",
+  "speechText": "Testing. Build confidence with layered automated checks.",
+  "sections": [
+    {
+      "id": "fast-feedback",
+      "title": "Start with fast feedback",
+      "body": "Small unit tests make a rule executable and quick to rerun. Use them to protect decisions that can be exercised without a browser, network, or database.",
+      "speechText": "Start with fast feedback. Small unit tests make a rule executable and quick to rerun. Use them to protect decisions that can be exercised without a browser, network, or database."
+    },
+    {
+      "id": "boundary-tests",
+      "title": "Test important boundaries",
+      "body": "Add a smaller number of integration or request-level tests where components meet. These tests verify that routing, serialization, persistence, or authentication are wired together as the user experiences them.",
+      "speechText": "Test important boundaries. Add a smaller number of integration or request-level tests where components meet. These tests verify that routing, serialization, persistence, or authentication are wired together as the user experiences them."
+    },
+    {
+      "id": "regression-loop",
+      "title": "Turn a defect into a regression test",
+      "body": "When a bug is understood, first write a test that demonstrates the incorrect behavior. Then make the smallest change that passes it, so the test becomes permanent evidence against the same failure.",
+      "speechText": "Turn a defect into a regression test. When a bug is understood, first write a test that demonstrates the incorrect behavior. Then make the smallest change that passes it, so the test becomes permanent evidence against the same failure."
+    }
+  ],
+  "questions": [
+    {
+      "id": "unit-test-target",
+      "prompt": "Which behavior is a good first unit-test target?",
+      "speechText": "Which behavior is a good first unit-test target? Option A, a calculation that transforms input values into a result. Option B, the color of a developer's terminal. Option C, a remote service's private database. Option D, a random production event.",
+      "options": [
+        {
+          "id": "a",
+          "text": "A calculation that transforms input values into a result.",
+          "speechText": "A calculation that transforms input values into a result."
+        },
+        {
+          "id": "b",
+          "text": "The color of a developer's terminal.",
+          "speechText": "The color of a developer's terminal."
+        },
+        {
+          "id": "c",
+          "text": "A remote service's private database.",
+          "speechText": "A remote service's private database."
+        },
+        {
+          "id": "d",
+          "text": "A random production event.",
+          "speechText": "A random production event."
+        }
+      ],
+      "correctOption": "a",
+      "explanation": "A deterministic transformation can run quickly with controlled inputs and directly describes an application rule.",
+      "explanationSpeechText": "A deterministic transformation can run quickly with controlled inputs and directly describes an application rule."
+    },
+    {
+      "id": "integration-value",
+      "prompt": "Why keep some request-level tests when unit tests already pass?",
+      "speechText": "Why keep some request-level tests when unit tests already pass? Option A, they make unit tests unnecessary. Option B, they verify that important components are wired together at a real boundary. Option C, they guarantee visual design approval. Option D, they replace monitoring.",
+      "options": [
+        {
+          "id": "a",
+          "text": "They make unit tests unnecessary.",
+          "speechText": "They make unit tests unnecessary."
+        },
+        {
+          "id": "b",
+          "text": "They verify that important components are wired together at a real boundary.",
+          "speechText": "They verify that important components are wired together at a real boundary."
+        },
+        {
+          "id": "c",
+          "text": "They guarantee visual design approval.",
+          "speechText": "They guarantee visual design approval."
+        },
+        {
+          "id": "d",
+          "text": "They replace monitoring.",
+          "speechText": "They replace monitoring."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "Unit tests isolate rules; request-level tests catch integration mistakes such as a route using the wrong serializer or dependency.",
+      "explanationSpeechText": "Unit tests isolate rules; request-level tests catch integration mistakes such as a route using the wrong serializer or dependency."
+    },
+    {
+      "id": "regression-first",
+      "prompt": "What is the strongest first step after reproducing a defect?",
+      "speechText": "What is the strongest first step after reproducing a defect? Option A, rewrite nearby modules. Option B, write a failing test that captures the bad behavior. Option C, remove the error message. Option D, mark the bug resolved without a change.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Rewrite nearby modules.",
+          "speechText": "Rewrite nearby modules."
+        },
+        {
+          "id": "b",
+          "text": "Write a failing test that captures the bad behavior.",
+          "speechText": "Write a failing test that captures the bad behavior."
+        },
+        {
+          "id": "c",
+          "text": "Remove the error message.",
+          "speechText": "Remove the error message."
+        },
+        {
+          "id": "d",
+          "text": "Mark the bug resolved without a change.",
+          "speechText": "Mark the bug resolved without a change."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "A failing regression test proves the problem is represented and gives the repair a repeatable definition of success.",
+      "explanationSpeechText": "A failing regression test proves the problem is represented and gives the repair a repeatable definition of success."
+    }
+  ],
+  "starterAction": {
+    "id": "add-a-focused-regression-test",
+    "title": "Add a focused regression test",
+    "description": "Choose one recent defect or brittle behavior, write the smallest failing test that demonstrates it, then make the smallest implementation change needed to turn it green.",
+    "speechText": "Add a focused regression test. Choose one recent defect or brittle behavior, write the smallest failing test that demonstrates it, then make the smallest implementation change needed to turn it green."
+  }
+}

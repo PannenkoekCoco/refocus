@@ -1,0 +1,123 @@
+{
+  "topicId": "git-and-github",
+  "title": "Git and GitHub",
+  "speechText": "Git and GitHub. Learn reliable collaboration and evidence of work.",
+  "sections": [
+    {
+      "id": "commit-story",
+      "title": "Make commits tell a reviewable story",
+      "body": "A useful commit changes one coherent behavior and explains why it changed. Small, intentional commits make it easier to review, revert, or trace a decision later.",
+      "speechText": "Make commits tell a reviewable story. A useful commit changes one coherent behavior and explains why it changed. Small, intentional commits make it easier to review, revert, or trace a decision later."
+    },
+    {
+      "id": "branch-and-pr",
+      "title": "Use branches to isolate a proposal",
+      "body": "A branch gives a change a safe place to evolve before it reaches the shared default branch. A pull request then records the purpose, review discussion, and checks for that proposal.",
+      "speechText": "Use branches to isolate a proposal. A branch gives a change a safe place to evolve before it reaches the shared default branch. A pull request then records the purpose, review discussion, and checks for that proposal."
+    },
+    {
+      "id": "checks-as-evidence",
+      "title": "Treat checks as evidence",
+      "body": "Continuous integration should run repeatable tests or validations on the proposed change. A passing check is evidence for a defined command, not a substitute for understanding the code.",
+      "speechText": "Treat checks as evidence. Continuous integration should run repeatable tests or validations on the proposed change. A passing check is evidence for a defined command, not a substitute for understanding the code."
+    }
+  ],
+  "questions": [
+    {
+      "id": "commit-scope",
+      "prompt": "Which commit is easiest for a teammate to review?",
+      "speechText": "Which commit is easiest for a teammate to review? Option A, refactor every module and add a feature together. Option B, add a validation rule with its focused test and explain the reason. Option C, save every local experiment. Option D, combine unrelated formatting changes with a database migration.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Refactor every module and add a feature together.",
+          "speechText": "Refactor every module and add a feature together."
+        },
+        {
+          "id": "b",
+          "text": "Add a validation rule with its focused test and explain the reason.",
+          "speechText": "Add a validation rule with its focused test and explain the reason."
+        },
+        {
+          "id": "c",
+          "text": "Save every local experiment.",
+          "speechText": "Save every local experiment."
+        },
+        {
+          "id": "d",
+          "text": "Combine unrelated formatting changes with a database migration.",
+          "speechText": "Combine unrelated formatting changes with a database migration."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "The reviewer can understand one behavior, inspect its evidence, and leave a focused comment. The other choices mix several decisions together.",
+      "explanationSpeechText": "The reviewer can understand one behavior, inspect its evidence, and leave a focused comment. The other choices mix several decisions together."
+    },
+    {
+      "id": "pull-request-purpose",
+      "prompt": "What should a pull request make easy to discover?",
+      "speechText": "What should a pull request make easy to discover? Option A, the author’s favorite editor. Option B, the problem, proposed change, validation evidence, and review discussion. Option C, every uncommitted local file. Option D, a replacement for project documentation.",
+      "options": [
+        {
+          "id": "a",
+          "text": "The author's favorite editor.",
+          "speechText": "The author's favorite editor."
+        },
+        {
+          "id": "b",
+          "text": "The problem, proposed change, validation evidence, and review discussion.",
+          "speechText": "The problem, proposed change, validation evidence, and review discussion."
+        },
+        {
+          "id": "c",
+          "text": "Every uncommitted local file.",
+          "speechText": "Every uncommitted local file."
+        },
+        {
+          "id": "d",
+          "text": "A replacement for project documentation.",
+          "speechText": "A replacement for project documentation."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "A pull request is a reviewable record of one proposal. It connects the reason for the change to the code and the checks that ran.",
+      "explanationSpeechText": "A pull request is a reviewable record of one proposal. It connects the reason for the change to the code and the checks that ran."
+    },
+    {
+      "id": "ci-meaning",
+      "prompt": "What does a passing continuous-integration check prove?",
+      "speechText": "What does a passing continuous-integration check prove? Option A, the repository has no future defects. Option B, the configured command passed for the submitted revision. Option C, a reviewer has approved the design. Option D, production users have accepted the feature.",
+      "options": [
+        {
+          "id": "a",
+          "text": "The repository has no future defects.",
+          "speechText": "The repository has no future defects."
+        },
+        {
+          "id": "b",
+          "text": "The configured command passed for the submitted revision.",
+          "speechText": "The configured command passed for the submitted revision."
+        },
+        {
+          "id": "c",
+          "text": "A reviewer has approved the design.",
+          "speechText": "A reviewer has approved the design."
+        },
+        {
+          "id": "d",
+          "text": "Production users have accepted the feature.",
+          "speechText": "Production users have accepted the feature."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "Checks offer specific, repeatable evidence about the revision they ran against. Their value depends on the commands and assertions they include.",
+      "explanationSpeechText": "Checks offer specific, repeatable evidence about the revision they ran against. Their value depends on the commands and assertions they include."
+    }
+  ],
+  "starterAction": {
+    "id": "open-reviewable-change",
+    "title": "Open a reviewable change",
+    "description": "Create a branch for one small improvement, make a focused commit with its validation, and draft a pull request that states the problem and evidence.",
+    "speechText": "Open a reviewable change. Create a branch for one small improvement, make a focused commit with its validation, and draft a pull request that states the problem and evidence."
+  }
+}

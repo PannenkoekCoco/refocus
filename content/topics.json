@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "topics": [
+    {
+      "id": "python-beyond-scripts",
+      "title": "Python beyond scripts",
+      "category": "foundation",
+      "contentStatus": "full",
+      "prerequisites": [],
+      "summary": "Turn scripts into maintainable, testable modules.",
+      "speechText": "Python beyond scripts. Turn scripts into maintainable, testable modules."
+    },
+    {
+      "id": "git-and-github",
+      "title": "Git and GitHub",
+      "category": "foundation",
+      "contentStatus": "full",
+      "prerequisites": [],
+      "summary": "Use history, branches, pull requests, and continuous integration deliberately.",
+      "speechText": "Git and GitHub. Learn reliable collaboration and evidence of work."
+    },
+    {
+      "id": "apis",
+      "title": "APIs",
+      "category": "foundation",
+      "contentStatus": "full",
+      "prerequisites": [
+        "python-beyond-scripts"
+      ],
+      "summary": "Design reliable HTTP contracts and build a service.",
+      "speechText": "APIs. Design reliable contracts and build a service."
+    },
+    {
+      "id": "structured-output-tool-calling",
+      "title": "Structured outputs and tool calling",
+      "category": "ai-systems",
+      "contentStatus": "starter",
+      "prerequisites": [
+        "apis"
+      ],
+      "summary": "Make model behavior typed, inspectable, and bounded.",
+      "speechText": "Structured outputs and tool calling."
+    },
+    {
+      "id": "sql",
+      "title": "SQL",
+      "category": "foundation",
+      "contentStatus": "full",
+      "prerequisites": [
+        "python-beyond-scripts"
+      ],
+      "summary": "Model and query persistent relational data.",
+      "speechText": "SQL. Model and query persistent relational data."
+    },
+    {
+      "id": "cloud-deployment",
+      "title": "Basic cloud deployment",
+      "category": "production",
+      "contentStatus": "starter",
+      "prerequisites": [
+        "apis"
+      ],
+      "summary": "Deploy a containerized application safely.",
+      "speechText": "Basic cloud deployment."
+    },
+    {
+      "id": "docker",
+      "title": "Docker",
+      "category": "production",
+      "contentStatus": "starter",
+      "prerequisites": [
+        "python-beyond-scripts"
+      ],
+      "summary": "Package a repeatable application environment.",
+      "speechText": "Docker."
+    },
+    {
+      "id": "authentication-and-permissions",
+      "title": "Authentication and permissions",
+      "category": "production",
+      "contentStatus": "starter",
+      "prerequisites": [
+        "apis",
+        "sql"
+      ],
+      "summary": "Establish identity and enforce ownership.",
+      "speechText": "Authentication and permissions."
+    },
+    {
+      "id": "testing",
+      "title": "Testing",
+      "category": "foundation",
+      "contentStatus": "full",
+      "prerequisites": [
+        "python-beyond-scripts"
+      ],
+      "summary": "Build confidence with layered automated checks.",
+      "speechText": "Testing."
+    },
+    {
+      "id": "logging-and-monitoring",
+      "title": "Logging and monitoring",
+      "category": "production",
+      "contentStatus": "starter",
+      "prerequisites": [
+        "apis"
+      ],
+      "summary": "Observe behavior without leaking private data.",
+      "speechText": "Logging and monitoring."
+    },
+    {
+      "id": "llm-evaluation",
+      "title": "LLM evaluation",
+      "category": "ai-systems",
+      "contentStatus": "starter",
+      "prerequisites": [
+        "structured-output-tool-calling",
+        "testing"
+      ],
+      "summary": "Measure model quality and regressions.",
+      "speechText": "LLM evaluation."
+    },
+    {
+      "id": "retrieval-augmented-generation",
+      "title": "Retrieval-augmented generation",
+      "category": "ai-systems",
+      "contentStatus": "starter",
+      "prerequisites": [
+        "apis",
+        "sql"
+      ],
+      "summary": "Ground answers in retrieved, attributable information.",
+      "speechText": "Retrieval augmented generation."
+    },
+    {
+      "id": "asynchronous-jobs-and-queues",
+      "title": "Asynchronous jobs and queues",
+      "category": "production",
+      "contentStatus": "starter",
+      "prerequisites": [
+        "apis",
+        "testing"
+      ],
+      "summary": "Move slow work out of request handling safely.",
+      "speechText": "Asynchronous jobs and queues."
+    },
+    {
+      "id": "software-architecture",
+      "title": "Basic software architecture",
+      "category": "foundation",
+      "contentStatus": "starter",
+      "prerequisites": [
+        "python-beyond-scripts"
+      ],
+      "summary": "Design small, understandable boundaries and dependencies.",
+      "speechText": "Basic software architecture."
+    }
+  ]
+}

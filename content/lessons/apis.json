@@ -1,0 +1,123 @@
+{
+  "topicId": "apis",
+  "title": "APIs",
+  "speechText": "APIs. Design reliable contracts and build a service.",
+  "sections": [
+    {
+      "id": "resource-contract",
+      "title": "Start with a resource contract",
+      "body": "Name the resource, the operations callers may request, the shape of accepted input, and the shape of returned output. A compact written contract prevents the server and client from making different guesses.",
+      "speechText": "Start with a resource contract. Name the resource, the operations callers may request, the shape of accepted input, and the shape of returned output. A compact written contract prevents the server and client from making different guesses."
+    },
+    {
+      "id": "validation-and-errors",
+      "title": "Make failures deliberate",
+      "body": "Validate incoming data at the boundary and return a status code that matches the outcome. Give callers a stable, safe error shape without exposing stack traces, secrets, or internal implementation details.",
+      "speechText": "Make failures deliberate. Validate incoming data at the boundary and return a status code that matches the outcome. Give callers a stable, safe error shape without exposing stack traces, secrets, or internal implementation details."
+    },
+    {
+      "id": "service-tests",
+      "title": "Prove the contract with service tests",
+      "body": "Exercise successful and failing requests against the service interface. The test should check status, returned body, and one meaningful side effect when the contract promises one.",
+      "speechText": "Prove the contract with service tests. Exercise successful and failing requests against the service interface. The test should check status, returned body, and one meaningful side effect when the contract promises one."
+    }
+  ],
+  "questions": [
+    {
+      "id": "invalid-input",
+      "prompt": "A client sends a required field with the wrong type. What should the API do?",
+      "speechText": "A client sends a required field with the wrong type. What should the API do? Option A, accept it and repair it later. Option B, return a clear client-error response with a safe explanation. Option C, return a stack trace. Option D, restart the service.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Accept it and repair it later.",
+          "speechText": "Accept it and repair it later."
+        },
+        {
+          "id": "b",
+          "text": "Return a clear client-error response with a safe explanation.",
+          "speechText": "Return a clear client-error response with a safe explanation."
+        },
+        {
+          "id": "c",
+          "text": "Return a stack trace.",
+          "speechText": "Return a stack trace."
+        },
+        {
+          "id": "d",
+          "text": "Restart the service.",
+          "speechText": "Restart the service."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "Invalid request data is a client-side contract failure. A safe client-error response helps the caller correct it without revealing internal details.",
+      "explanationSpeechText": "Invalid request data is a client-side contract failure. A safe client-error response helps the caller correct it without revealing internal details."
+    },
+    {
+      "id": "not-found",
+      "prompt": "Which response best represents a request for a resource that does not exist?",
+      "speechText": "Which response best represents a request for a resource that does not exist? Option A, successful response with invented data. Option B, not-found response. Option C, server-error response. Option D, redirect to the home page.",
+      "options": [
+        {
+          "id": "a",
+          "text": "A successful response with invented data.",
+          "speechText": "A successful response with invented data."
+        },
+        {
+          "id": "b",
+          "text": "A not-found response.",
+          "speechText": "A not-found response."
+        },
+        {
+          "id": "c",
+          "text": "A server-error response.",
+          "speechText": "A server-error response."
+        },
+        {
+          "id": "d",
+          "text": "A redirect to the home page.",
+          "speechText": "A redirect to the home page."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "A not-found response tells the caller that the requested resource identifier is validly understood but has no current representation.",
+      "explanationSpeechText": "A not-found response tells the caller that the requested resource identifier is validly understood but has no current representation."
+    },
+    {
+      "id": "contract-test",
+      "prompt": "Which test most directly protects an API contract?",
+      "speechText": "Which test most directly protects an API contract? Option A, assert that an internal helper has a particular local variable. Option B, send a request and assert the documented status and response body. Option C, count source-file lines. Option D, compare editor settings.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Assert that an internal helper has a particular local variable.",
+          "speechText": "Assert that an internal helper has a particular local variable."
+        },
+        {
+          "id": "b",
+          "text": "Send a request and assert the documented status and response body.",
+          "speechText": "Send a request and assert the documented status and response body."
+        },
+        {
+          "id": "c",
+          "text": "Count source-file lines.",
+          "speechText": "Count source-file lines."
+        },
+        {
+          "id": "d",
+          "text": "Compare editor settings.",
+          "speechText": "Compare editor settings."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "The caller observes request and response behavior. A service-level test detects a change to that public contract while allowing internal refactoring.",
+      "explanationSpeechText": "The caller observes request and response behavior. A service-level test detects a change to that public contract while allowing internal refactoring."
+    }
+  ],
+  "starterAction": {
+    "id": "build-one-resource",
+    "title": "Build one resource endpoint",
+    "description": "Define a small resource with one successful response and one validation failure, then write a request-level test for both outcomes.",
+    "speechText": "Build one resource endpoint. Define a small resource with one successful response and one validation failure, then write a request-level test for both outcomes."
+  }
+}

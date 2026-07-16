@@ -1,0 +1,123 @@
+{
+  "topicId": "sql",
+  "title": "SQL",
+  "speechText": "SQL. Model and query persistent relational data.",
+  "sections": [
+    {
+      "id": "model-relationships",
+      "title": "Model facts and relationships",
+      "body": "Store one kind of fact in a table with a primary key, then use foreign keys to express relationships between facts. Constraints turn important assumptions into rules the database can enforce.",
+      "speechText": "Model facts and relationships. Store one kind of fact in a table with a primary key, then use foreign keys to express relationships between facts. Constraints turn important assumptions into rules the database can enforce."
+    },
+    {
+      "id": "query-intent",
+      "title": "Write queries that state their intent",
+      "body": "Select only the columns a caller needs, filter with clear predicates, and join tables through their declared relationship. Start with a small known data set so you can inspect whether the rows mean what you expect.",
+      "speechText": "Write queries that state their intent. Select only the columns a caller needs, filter with clear predicates, and join tables through their declared relationship. Start with a small known data set so you can inspect whether the rows mean what you expect."
+    },
+    {
+      "id": "safe-change",
+      "title": "Change schemas deliberately",
+      "body": "A schema change is a versioned migration, not an informal edit. Describe how existing rows remain valid, apply the change in a repeatable order, and test the application against the new structure.",
+      "speechText": "Change schemas deliberately. A schema change is a versioned migration, not an informal edit. Describe how existing rows remain valid, apply the change in a repeatable order, and test the application against the new structure."
+    }
+  ],
+  "questions": [
+    {
+      "id": "foreign-key",
+      "prompt": "What is the main purpose of a foreign-key constraint?",
+      "speechText": "What is the main purpose of a foreign-key constraint? Option A, make query results alphabetical. Option B, ensure a referenced related record exists. Option C, encrypt every table. Option D, replace application validation.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Make query results alphabetical.",
+          "speechText": "Make query results alphabetical."
+        },
+        {
+          "id": "b",
+          "text": "Ensure a referenced related record exists.",
+          "speechText": "Ensure a referenced related record exists."
+        },
+        {
+          "id": "c",
+          "text": "Encrypt every table.",
+          "speechText": "Encrypt every table."
+        },
+        {
+          "id": "d",
+          "text": "Replace application validation.",
+          "speechText": "Replace application validation."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "A foreign key protects a relationship at the data layer by preventing a row from pointing at a missing related row.",
+      "explanationSpeechText": "A foreign key protects a relationship at the data layer by preventing a row from pointing at a missing related row."
+    },
+    {
+      "id": "join-condition",
+      "prompt": "Which join condition most clearly connects orders to customers?",
+      "speechText": "Which join condition most clearly connects orders to customers? Option A, orders total equals customers id. Option B, orders customer id equals customers id. Option C, orders created time equals customers name. Option D, every orders row joins every customers row.",
+      "options": [
+        {
+          "id": "a",
+          "text": "orders total equals customers id.",
+          "speechText": "Orders total equals customers id."
+        },
+        {
+          "id": "b",
+          "text": "orders customer id equals customers id.",
+          "speechText": "Orders customer id equals customers id."
+        },
+        {
+          "id": "c",
+          "text": "orders created time equals customers name.",
+          "speechText": "Orders created time equals customers name."
+        },
+        {
+          "id": "d",
+          "text": "Every orders row joins every customers row.",
+          "speechText": "Every orders row joins every customers row."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "The foreign-key column on an order references the primary-key column on its customer. Joining those keys reflects the modeled relationship.",
+      "explanationSpeechText": "The foreign-key column on an order references the primary-key column on its customer. Joining those keys reflects the modeled relationship."
+    },
+    {
+      "id": "migration-discipline",
+      "prompt": "What makes a database schema change safe to repeat?",
+      "speechText": "What makes a database schema change safe to repeat? Option A, edit the production table by hand. Option B, record the change as a migration with a defined order. Option C, delete existing rows first. Option D, change only the application query.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Edit the production table by hand.",
+          "speechText": "Edit the production table by hand."
+        },
+        {
+          "id": "b",
+          "text": "Record the change as a migration with a defined order.",
+          "speechText": "Record the change as a migration with a defined order."
+        },
+        {
+          "id": "c",
+          "text": "Delete existing rows first.",
+          "speechText": "Delete existing rows first."
+        },
+        {
+          "id": "d",
+          "text": "Change only the application query.",
+          "speechText": "Change only the application query."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "A versioned migration gives each environment the same documented sequence and allows the application and schema to evolve together.",
+      "explanationSpeechText": "A versioned migration gives each environment the same documented sequence and allows the application and schema to evolve together."
+    }
+  ],
+  "starterAction": {
+    "id": "model-a-small-resource",
+    "title": "Model a small resource",
+    "description": "Choose one resource and one related record, define their primary and foreign keys, then write a query that returns only the fields a caller needs.",
+    "speechText": "Model a small resource. Choose one resource and one related record, define their primary and foreign keys, then write a query that returns only the fields a caller needs."
+  }
+}

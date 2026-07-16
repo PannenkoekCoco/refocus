@@ -1,0 +1,123 @@
+{
+  "topicId": "python-beyond-scripts",
+  "title": "Python beyond scripts",
+  "speechText": "Python beyond scripts. Turn scripts into maintainable, testable modules.",
+  "sections": [
+    {
+      "id": "module-boundaries",
+      "title": "Give each module one job",
+      "body": "A script becomes easier to change when parsing input, applying rules, and presenting output live in separate functions or modules. Name the boundary after the job it performs, not after the file it happened to start in.",
+      "speechText": "Give each module one job. A script becomes easier to change when parsing input, applying rules, and presenting output live in separate functions or modules. Name the boundary after the job it performs, not after the file it happened to start in."
+    },
+    {
+      "id": "side-effects-at-edges",
+      "title": "Keep side effects at the edge",
+      "body": "Reading files, calling services, and printing results are useful but difficult to test. Put those effects in a thin entry point and pass plain values into the logic that decides what should happen.",
+      "speechText": "Keep side effects at the edge. Reading files, calling services, and printing results are useful but difficult to test. Put those effects in a thin entry point and pass plain values into the logic that decides what should happen."
+    },
+    {
+      "id": "small-contract-tests",
+      "title": "Test observable contracts",
+      "body": "Start with a small input and the result a caller should receive. Tests should describe stable behavior such as a parsed record or a rejected value, instead of depending on private temporary variables.",
+      "speechText": "Test observable contracts. Start with a small input and the result a caller should receive. Tests should describe stable behavior such as a parsed record or a rejected value, instead of depending on private temporary variables."
+    }
+  ],
+  "questions": [
+    {
+      "id": "separate-file-reading",
+      "prompt": "Which change makes a data-cleaning script easiest to test?",
+      "speechText": "Which change makes a data-cleaning script easiest to test? Option A, put all work in one main function. Option B, move file reading into a thin entry point and pass text to a pure cleaning function. Option C, print every intermediate value. Option D, copy the script for each input file.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Put all work in one main function.",
+          "speechText": "Put all work in one main function."
+        },
+        {
+          "id": "b",
+          "text": "Move file reading into a thin entry point and pass text to a pure cleaning function.",
+          "speechText": "Move file reading into a thin entry point and pass text to a pure cleaning function."
+        },
+        {
+          "id": "c",
+          "text": "Print every intermediate value.",
+          "speechText": "Print every intermediate value."
+        },
+        {
+          "id": "d",
+          "text": "Copy the script for each input file.",
+          "speechText": "Copy the script for each input file."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "The pure cleaning function can be called with small examples without touching the filesystem, while the entry point keeps the real file operation in one place.",
+      "explanationSpeechText": "The pure cleaning function can be called with small examples without touching the filesystem, while the entry point keeps the real file operation in one place."
+    },
+    {
+      "id": "module-purpose",
+      "prompt": "What is the clearest reason to extract a module?",
+      "speechText": "What is the clearest reason to extract a module? Option A, the file has reached a specific number of lines. Option B, a group of code has one named responsibility and a small interface. Option C, every function should be in a separate file. Option D, imports should always be avoided.",
+      "options": [
+        {
+          "id": "a",
+          "text": "The file has reached a specific number of lines.",
+          "speechText": "The file has reached a specific number of lines."
+        },
+        {
+          "id": "b",
+          "text": "A group of code has one named responsibility and a small interface.",
+          "speechText": "A group of code has one named responsibility and a small interface."
+        },
+        {
+          "id": "c",
+          "text": "Every function should be in a separate file.",
+          "speechText": "Every function should be in a separate file."
+        },
+        {
+          "id": "d",
+          "text": "Imports should always be avoided.",
+          "speechText": "Imports should always be avoided."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "A module boundary is useful when it gives callers a clear responsibility and interface. File size alone does not define a healthy boundary.",
+      "explanationSpeechText": "A module boundary is useful when it gives callers a clear responsibility and interface. File size alone does not define a healthy boundary."
+    },
+    {
+      "id": "test-contract",
+      "prompt": "Which assertion describes a stable public contract?",
+      "speechText": "Which assertion describes a stable public contract? Option A, a local variable has a chosen name. Option B, a parser returns a normalized record for valid input. Option C, a function has exactly seven lines. Option D, a debug message prints first.",
+      "options": [
+        {
+          "id": "a",
+          "text": "A local variable has a chosen name.",
+          "speechText": "A local variable has a chosen name."
+        },
+        {
+          "id": "b",
+          "text": "A parser returns a normalized record for valid input.",
+          "speechText": "A parser returns a normalized record for valid input."
+        },
+        {
+          "id": "c",
+          "text": "A function has exactly seven lines.",
+          "speechText": "A function has exactly seven lines."
+        },
+        {
+          "id": "d",
+          "text": "A debug message prints first.",
+          "speechText": "A debug message prints first."
+        }
+      ],
+      "correctOption": "b",
+      "explanation": "Callers depend on the normalized record, not on internal naming or formatting. Tests of observable results tolerate safe refactoring.",
+      "explanationSpeechText": "Callers depend on the normalized record, not on internal naming or formatting. Tests of observable results tolerate safe refactoring."
+    }
+  ],
+  "starterAction": {
+    "id": "extract-script-core",
+    "title": "Extract a script core",
+    "description": "Choose one existing script, move its decision-making into a function that accepts and returns plain values, and add one focused test for that function.",
+    "speechText": "Extract a script core. Choose one existing script, move its decision-making into a function that accepts and returns plain values, and add one focused test for that function."
+  }
+}
