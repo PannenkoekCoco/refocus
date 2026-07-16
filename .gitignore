@@ -18,6 +18,7 @@ local-tts/python/
 local-tts/cache/
 local-tts/downloads/
 local-tts/__pycache__/
+local-tts/*.log
 
 # Secrets and local configuration
 .env
