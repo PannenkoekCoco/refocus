@@ -9,7 +9,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_DATABASE_URL = "postgresql+psycopg://learning:learning_local_only@127.0.0.1:5432/learning_companion"
 DEFAULT_APP_ORIGIN = "http://127.0.0.1:8000"
 MINIMUM_PRODUCTION_SESSION_SECRET_LENGTH = 32
-MAX_REPEATED_SESSION_SECRET_PATTERN_LENGTH = 4
 KNOWN_NON_PRODUCTION_SESSION_SECRETS = frozenset(
     {
         "development-only-replace-before-deploy",
@@ -19,14 +18,15 @@ KNOWN_NON_PRODUCTION_SESSION_SECRETS = frozenset(
 )
 
 
-def has_short_repeated_pattern(value: str) -> bool:
-    """Reject only obvious, whole-secret repetitions without restricting generated formats."""
-    max_pattern_length = min(MAX_REPEATED_SESSION_SECRET_PATTERN_LENGTH, len(value) // 2)
-    return any(
-        len(value) % pattern_length == 0
-        and value == value[:pattern_length] * (len(value) // pattern_length)
-        for pattern_length in range(1, max_pattern_length + 1)
-    )
+def has_repeated_pattern(value: str) -> bool:
+    """Return whether a value is made from two or more exact copies of one pattern."""
+    for pattern_length in range(1, len(value) // 2 + 1):
+        if len(value) % pattern_length != 0:
+            continue
+        repetitions = len(value) // pattern_length
+        if value == value[:pattern_length] * repetitions:
+            return True
+    return False
 
 
 class Settings(BaseSettings):
@@ -109,7 +109,7 @@ class Settings(BaseSettings):
         if (
             len(session_secret) < MINIMUM_PRODUCTION_SESSION_SECRET_LENGTH
             or session_secret.strip().casefold() in KNOWN_NON_PRODUCTION_SESSION_SECRETS
-            or has_short_repeated_pattern(session_secret)
+            or has_repeated_pattern(session_secret)
         ):
             raise ValueError("SESSION_SECRET must be a safely generated value in production")
         if self.session_cookie_secure is False:

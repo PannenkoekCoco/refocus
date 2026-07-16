@@ -236,6 +236,8 @@ def test_production_settings_accept_generated_urlsafe_and_hex_session_secrets(
         "ci-session-secret-only-not-for-production",
         "a" * 48,
         "abcd" * 12,
+        pytest.param("password" * 6, id="eight-character-pattern"),
+        pytest.param("abcde" * 10, id="five-character-pattern"),
     ),
 )
 def test_production_settings_reject_known_or_repeated_session_secrets(unsafe_secret: str) -> None:
