@@ -83,3 +83,32 @@ test("a quiz attempt is saved before a caller refreshes recommendations", async 
   assert.equal(events[1][0], "refresh");
   assert.deepEqual(result.recommendation, { topicId: "sql" });
 });
+
+test("a failed quiz save records local pending progress before refreshing recommendations", async () => {
+  const storage = createStorage();
+  let rejectSave;
+  let refreshCalls = 0;
+  const client = createProgressClient({
+    fetchImpl: () => new Promise((resolve, reject) => {
+      rejectSave = reject;
+    }),
+    storage,
+  });
+
+  const completion = client.saveQuizAttemptAndRefresh(attempt, async () => {
+    refreshCalls += 1;
+    const persisted = JSON.parse(storage.getItem(LEARNING_ROUTE_STORAGE_KEY));
+    assert.deepEqual(persisted.pendingProgress, [{ kind: "quizAttempt", payload: attempt }]);
+    return { topicId: "sql" };
+  });
+
+  await Promise.resolve();
+  assert.equal(refreshCalls, 0);
+
+  rejectSave(new TypeError("offline"));
+  const result = await completion;
+
+  assert.equal(refreshCalls, 1);
+  assert.equal(result.attempt, null);
+  assert.deepEqual(result.recommendation, { topicId: "sql" });
+});

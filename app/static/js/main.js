@@ -247,15 +247,18 @@ async function saveQuiz(result) {
     correct: result.correct,
     total: result.total,
   };
-  const persisted = dispatchLearningState(
+  const savedLocally = dispatchLearningState(
     { type: "recordQuiz", topicId: currentView.topic.id, attempt: quizAttempt },
     "Quiz result saved locally.",
   );
-  await progressClient.saveQuizAttempt({
-    lessonId: currentView.lesson?.topicId ?? currentView.topic.id,
-    answers: result.answers,
-  });
-  return persisted;
+  const { recommendation } = await progressClient.saveQuizAttemptAndRefresh(
+    {
+      lessonId: currentView.lesson?.topicId ?? currentView.topic.id,
+      answers: result.answers,
+    },
+    () => getRecommendation(),
+  );
+  return { savedLocally, recommendation };
 }
 
 function showMission(mission) {

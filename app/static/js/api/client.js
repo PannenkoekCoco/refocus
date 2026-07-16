@@ -85,7 +85,6 @@ export function createProgressClient({
 
   async function saveQuizAttemptAndRefresh(attempt, refreshRecommendation) {
     const savedAttempt = await saveQuizAttempt(attempt);
-    if (savedAttempt === null) return { attempt: null, recommendation: null };
     return {
       attempt: savedAttempt,
       recommendation: await refreshRecommendation(),

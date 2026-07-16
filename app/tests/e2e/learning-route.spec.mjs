@@ -80,6 +80,64 @@ test("topic exploration syncs and quiz results wait for the attempted progress s
   await expect(page.getByRole("heading", { name: "Quiz complete: 3/3." })).toBeVisible();
 });
 
+test("the live quiz renders its refreshed local recommendation only after progress persistence settles", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("engineeringLearningRoute.v1", JSON.stringify({
+      quizAttempts: {
+        "python-beyond-scripts": { correct: 3, total: 3 },
+        "git-and-github": { correct: 3, total: 3 },
+      },
+    }));
+  });
+
+  let releaseQuizSave;
+  const quizSaveCanFinish = new Promise((resolve) => {
+    releaseQuizSave = resolve;
+  });
+
+  await page.route("**/api/progress/**", async (route) => {
+    if (route.request().method() === "PUT") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "00000000-0000-0000-0000-000000000001",
+          topicId: "apis",
+          status: "explored",
+          updatedAt: "2026-07-16T00:00:00Z",
+        }),
+      });
+      return;
+    }
+
+    await quizSaveCanFinish;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({}),
+    });
+  });
+
+  await page.goto("./");
+  await expect(page.locator(".recommendation-card")).toContainText("APIs");
+  await page.locator(".recommendation-card").getByRole("button", { name: "Open APIs" }).click();
+  await page.getByRole("button", { name: "Start quiz" }).click();
+
+  for (let questionIndex = 0; questionIndex < 3; questionIndex += 1) {
+    await page.getByRole("button", { name: /^B\./ }).click();
+    if (questionIndex < 2) {
+      await page.getByRole("button", { name: "Next question" }).click();
+    }
+  }
+
+  await page.getByRole("button", { name: "See results" }).click();
+  await expect(page.getByText("Suggested next: Structured outputs and tool calling")).not.toBeVisible();
+
+  releaseQuizSave();
+  await expect(page.getByRole("heading", { name: "Quiz complete: 3/3." })).toBeVisible();
+  await expect(page.getByText("Suggested next: Structured outputs and tool calling")).toBeVisible();
+});
+
 test("pinning keeps focus on the replacement pin control", async ({ page }) => {
   await page.goto("./");
   await page.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();

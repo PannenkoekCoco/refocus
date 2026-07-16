@@ -36,7 +36,7 @@ export function renderQuiz({
     element.focus();
   }
 
-  function showResult(result, savedLocally = true) {
+  function showResult(result, { savedLocally = true, recommendation = null } = {}) {
     container.replaceChildren();
     const screen = createElement("section");
     screen.className = "quiz-screen";
@@ -53,6 +53,10 @@ export function renderQuiz({
         ? `Your ${topic.title} result is available on the route map.`
         : `Your ${topic.title} result is available for this session. It could not be saved locally.`,
     );
+    const suggestedNext = recommendation
+      ? createElement("p", `Suggested next: ${recommendation.title}`)
+      : null;
+    if (suggestedNext) suggestedNext.className = "topic-summary";
     const actions = createElement("div");
     actions.className = "result-actions";
     if (onMission) {
@@ -66,7 +70,9 @@ export function renderQuiz({
     back.className = onMission ? "secondary" : "";
     back.addEventListener("click", onBackToRoute);
     actions.append(back);
-    card.append(label, heading, copy, actions);
+    card.append(label, heading, copy);
+    if (suggestedNext) card.append(suggestedNext);
+    card.append(actions);
     screen.append(card);
     container.append(screen);
     focusElement(heading);
@@ -139,10 +145,9 @@ export function renderQuiz({
           seeResults.addEventListener("click", async () => {
             seeResults.disabled = true;
             try {
-              const savedLocally = await completion;
-              showResult(result, savedLocally !== false);
+              showResult(result, await completion);
             } catch {
-              showResult(result, false);
+              showResult(result, { savedLocally: false });
             }
           });
           feedbackCard.append(seeResults);
