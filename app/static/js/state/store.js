@@ -16,14 +16,18 @@ function uniqueStringIds(value) {
   return [...new Set(value.filter((item) => typeof item === "string" && item.length > 0))];
 }
 
+function isNonNegativeInteger(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
 function normaliseQuizAttempts(value) {
   if (!isRecord(value)) return {};
   return Object.fromEntries(
     Object.entries(value).filter(([, attempt]) => (
       isRecord(attempt)
-      && Number.isFinite(attempt.correct)
-      && Number.isFinite(attempt.total)
-      && attempt.total >= 0
+      && isNonNegativeInteger(attempt.correct)
+      && isNonNegativeInteger(attempt.total)
+      && attempt.correct <= attempt.total
     )),
   );
 }
@@ -46,18 +50,24 @@ export function normaliseLearningState(value) {
   };
 }
 
-export function loadLearningState(storage = globalThis.localStorage) {
+export function loadLearningState(storage) {
   try {
-    const cached = storage?.getItem(LEARNING_ROUTE_STORAGE_KEY);
+    const targetStorage = storage === undefined ? globalThis.localStorage : storage;
+    if (!targetStorage || typeof targetStorage.getItem !== "function") {
+      return normaliseLearningState();
+    }
+    const cached = targetStorage.getItem(LEARNING_ROUTE_STORAGE_KEY);
     return cached ? normaliseLearningState(JSON.parse(cached)) : normaliseLearningState();
   } catch {
     return normaliseLearningState();
   }
 }
 
-export function persistLearningState(storage = globalThis.localStorage, state) {
+export function persistLearningState(storage, state) {
   try {
-    storage?.setItem(LEARNING_ROUTE_STORAGE_KEY, JSON.stringify(normaliseLearningState(state)));
+    const targetStorage = storage === undefined ? globalThis.localStorage : storage;
+    if (!targetStorage || typeof targetStorage.setItem !== "function") return false;
+    targetStorage.setItem(LEARNING_ROUTE_STORAGE_KEY, JSON.stringify(normaliseLearningState(state)));
     return true;
   } catch {
     return false;

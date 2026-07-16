@@ -17,6 +17,7 @@ const app = document.querySelector("#app");
 const shellHeader = document.querySelector("#shell-header");
 const statusMessage = createStatusMessage(document.querySelector("#status-message"));
 const tts = createTtsProvider();
+const SESSION_ONLY_PROGRESS_MESSAGE = "Progress is available for this session only because it could not be saved locally.";
 
 function getBrowserStorage() {
   try {
@@ -60,9 +61,16 @@ function renderLoading(message) {
 
 const storage = getBrowserStorage();
 const store = createStore(loadLearningState(storage));
+let latestPersistenceSucceeded = true;
 store.subscribe((state) => {
-  persistLearningState(storage, state);
+  latestPersistenceSucceeded = persistLearningState(storage, state);
 });
+
+function dispatchLearningState(action, savedMessage) {
+  store.dispatch(action);
+  statusMessage.announce(latestPersistenceSucceeded ? savedMessage : SESSION_ONLY_PROGRESS_MESSAGE);
+  return latestPersistenceSucceeded;
+}
 
 let topics = [];
 let missions = [];
@@ -108,7 +116,7 @@ function renderShellHeader(recommendation) {
   shellHeader.append(inner);
 }
 
-function render({ moveFocus = false } = {}) {
+function render({ moveFocus = false, focusTarget } = {}) {
   app.replaceChildren();
   const recommendation = topics.length > 0 ? getRecommendation() : null;
   renderShellHeader(recommendation);
@@ -165,7 +173,10 @@ function render({ moveFocus = false } = {}) {
     });
   }
 
-  if (moveFocus) {
+  const requestedFocus = focusTarget?.(app);
+  if (requestedFocus) {
+    requestedFocus.focus();
+  } else if (moveFocus || focusTarget) {
     const screenHeading = app.querySelector("h2");
     if (screenHeading) {
       screenHeading.tabIndex = -1;
@@ -178,9 +189,14 @@ function render({ moveFocus = false } = {}) {
 
 function togglePin(topic) {
   const isPinned = store.getState().pinnedTopicId === topic.id;
-  store.dispatch({ type: isPinned ? "unpin" : "pin", topicId: topic.id });
-  statusMessage.announce(isPinned ? `${topic.title} is no longer pinned.` : `${topic.title} is pinned.`);
-  render();
+  dispatchLearningState(
+    { type: isPinned ? "unpin" : "pin", topicId: topic.id },
+    isPinned ? `${topic.title} is no longer pinned.` : `${topic.title} is pinned.`,
+  );
+  render({
+    focusTarget: (container) => [...container.querySelectorAll("[data-pin-topic-id]")]
+      .find((control) => control.dataset.pinTopicId === topic.id),
+  });
 }
 
 function showRoute() {
@@ -197,7 +213,7 @@ async function openTopic(node) {
   const topic = topics.find((candidate) => candidate.id === node.id);
   if (!topic) return;
 
-  store.dispatch({ type: "exploreLesson", topicId: topic.id });
+  dispatchLearningState({ type: "exploreLesson", topicId: topic.id }, `${topic.title} is marked as explored.`);
   if (topic.contentStatus !== "full") {
     showLesson(topic, null);
     return;
@@ -224,8 +240,10 @@ function saveQuiz(result) {
     correct: result.correct,
     total: result.total,
   };
-  store.dispatch({ type: "recordQuiz", topicId: currentView.topic.id, attempt: quizAttempt });
-  statusMessage.announce("Quiz result saved locally.");
+  return dispatchLearningState(
+    { type: "recordQuiz", topicId: currentView.topic.id, attempt: quizAttempt },
+    "Quiz result saved locally.",
+  );
 }
 
 function showMission(mission) {
@@ -234,8 +252,10 @@ function showMission(mission) {
 }
 
 function saveMission(mission, missionState) {
-  store.dispatch({ type: "saveMission", missionId: mission.id, missionState });
-  statusMessage.announce("Mission marked self-reviewed and saved locally. It has not been independently verified.");
+  dispatchLearningState(
+    { type: "saveMission", missionId: mission.id, missionState },
+    "Mission marked self-reviewed and saved locally. It has not been independently verified.",
+  );
 }
 
 async function start() {

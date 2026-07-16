@@ -38,6 +38,41 @@ test("a malformed nested cache record does not become usable learning state", ()
   });
 });
 
+test("cached quiz attempts reject impossible or imprecise scores", () => {
+  const storage = {
+    getItem: () => JSON.stringify({
+      quizAttempts: {
+        valid: { correct: 2, total: 3 },
+        zero: { correct: 0, total: 0 },
+        fractionalCorrect: { correct: 1.5, total: 2 },
+        fractionalTotal: { correct: 1, total: 2.5 },
+        negativeCorrect: { correct: -1, total: 2 },
+        exceedsTotal: { correct: 3, total: 2 },
+      },
+    }),
+  };
+
+  assert.deepEqual(loadLearningState(storage).quizAttempts, {
+    valid: { correct: 2, total: 3 },
+    zero: { correct: 0, total: 0 },
+  });
+});
+
+test("persistence never claims success when storage is unavailable or rejects a write", () => {
+  const state = {
+    pinnedTopicId: "apis",
+    exploredLessonIds: [],
+    quizAttempts: {},
+    missionStates: {},
+  };
+
+  assert.equal(persistLearningState(null, state), false);
+  assert.equal(
+    persistLearningState({ setItem: () => { throw new Error("quota exceeded"); } }, state),
+    false,
+  );
+});
+
 test("the store records learning progress and persists only its route key", () => {
   const store = createStore({
     pinnedTopicId: null,

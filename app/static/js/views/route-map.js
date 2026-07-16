@@ -60,6 +60,7 @@ export function renderRouteMap({ container, route, onPin, onOpenTopic }) {
     const pin = createElement("button", `${node.isPinned ? "Unpin" : "Pin"} ${node.title}`);
     pin.type = "button";
     pin.className = "secondary";
+    pin.dataset.pinTopicId = node.id;
     pin.setAttribute("aria-pressed", String(node.isPinned));
     pin.addEventListener("click", () => onPin(node));
     const open = createElement("button", node.actionLabel);

@@ -31,18 +31,28 @@ export function renderQuiz({
 }) {
   const session = createQuizSession(lesson.questions.map(toQuizQuestion));
 
-  function showResult(result) {
+  function focusElement(element) {
+    element.tabIndex = -1;
+    element.focus();
+  }
+
+  function showResult(result, savedLocally = true) {
     container.replaceChildren();
     const screen = createElement("section");
     screen.className = "quiz-screen";
     screen.setAttribute("aria-labelledby", "quiz-result-heading");
     const card = createElement("article");
     card.className = "quiz-card";
-    const label = createElement("p", "Quiz saved locally");
+    const label = createElement("p", savedLocally ? "Quiz saved locally" : "Quiz available for this session");
     label.className = "eyebrow";
     const heading = createElement("h2", `Quiz complete: ${result.correct}/${result.total}.`);
     heading.id = "quiz-result-heading";
-    const copy = createElement("p", `Your ${topic.title} result is available on the route map.`);
+    const copy = createElement(
+      "p",
+      savedLocally
+        ? `Your ${topic.title} result is available on the route map.`
+        : `Your ${topic.title} result is available for this session. It could not be saved locally.`,
+    );
     const actions = createElement("div");
     actions.className = "result-actions";
     if (onMission) {
@@ -59,6 +69,7 @@ export function renderQuiz({
     card.append(label, heading, copy, actions);
     screen.append(card);
     container.append(screen);
+    focusElement(heading);
   }
 
   function showQuestion() {
@@ -103,6 +114,7 @@ export function renderQuiz({
         const feedbackCard = createElement("section");
         feedbackCard.className = `quiz-feedback ${feedback.correct ? "correct" : "incorrect"}`;
         feedbackCard.setAttribute("aria-live", "polite");
+        feedbackCard.setAttribute("aria-label", "Answer feedback");
         const expectedOption = question.options[feedback.expectedIndex];
         const feedbackText = feedback.correct
           ? "Correct."
@@ -121,8 +133,13 @@ export function renderQuiz({
 
         if (question.id === lesson.questions.at(-1).id) {
           const result = session.result();
-          onComplete(result);
-          showResult(result);
+          const savedLocally = onComplete(result) !== false;
+          const seeResults = createElement("button", "See results");
+          seeResults.type = "button";
+          seeResults.addEventListener("click", () => showResult(result, savedLocally));
+          feedbackCard.append(seeResults);
+          card.append(feedbackCard);
+          focusElement(feedbackCard);
           return;
         }
 
@@ -134,6 +151,7 @@ export function renderQuiz({
         });
         feedbackCard.append(next);
         card.append(feedbackCard);
+        focusElement(feedbackCard);
       });
       answerButtons.push(answer);
       options.append(answer);
@@ -142,6 +160,7 @@ export function renderQuiz({
     card.append(label, heading, narrator, options);
     screen.append(backRow, card);
     container.append(screen);
+    focusElement(heading);
   }
 
   showQuestion();
