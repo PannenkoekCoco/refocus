@@ -189,3 +189,71 @@ def test_tts_rejects_an_oversized_body_before_reading_it() -> None:
 
     assert handler.status == 413
     assert handler.rfile.read_sizes == []
+
+
+def reset_activity_state(monkeypatch) -> None:
+    monkeypatch.setattr(tts_server, "_saw_trainer", False)
+    monkeypatch.setattr(tts_server, "_last_heartbeat", 123.0)
+
+
+def test_cross_origin_static_get_does_not_mark_helper_active(monkeypatch) -> None:
+    reset_activity_state(monkeypatch)
+
+    status, _, _ = request_server(
+        "GET",
+        "/js/content/loader.js",
+        headers={"Origin": "https://untrusted.example"},
+    )
+
+    assert status == 200
+    assert tts_server._saw_trainer is False
+    assert tts_server._last_heartbeat == 123.0
+
+
+def test_heartbeat_rejects_missing_and_disallowed_origins_without_activity(monkeypatch) -> None:
+    for method, headers in (
+        ("GET", {}),
+        ("POST", {"Origin": "https://untrusted.example"}),
+    ):
+        reset_activity_state(monkeypatch)
+
+        status, _, body = request_server(method, "/heartbeat", headers=headers)
+
+        assert status == 403
+        assert "error" in json.loads(body)
+        assert tts_server._saw_trainer is False
+        assert tts_server._last_heartbeat == 123.0
+
+
+def test_heartbeat_allows_configured_origin_to_mark_active(monkeypatch) -> None:
+    reset_activity_state(monkeypatch)
+
+    status, _, body = request_server(
+        "GET",
+        "/heartbeat",
+        headers={"Origin": "http://127.0.0.1:8000"},
+    )
+
+    assert status == 200
+    assert json.loads(body) == {"ok": True}
+    assert tts_server._saw_trainer is True
+    assert tts_server._last_heartbeat != 123.0
+
+
+def test_deeply_nested_tts_json_returns_stable_400_without_loading_model(monkeypatch) -> None:
+    def synthesize_never_called(_: str) -> bytes:
+        raise AssertionError("synthesis should not run for invalid JSON")
+
+    monkeypatch.setattr(tts_server, "synthesize", synthesize_never_called)
+    body = b'{"text":' + b"[" * 5000 + b'"x"' + b"]" * 5000 + b"}"
+    assert len(body) < tts_server.MAX_REQUEST_BODY_BYTES
+
+    status, _, response_body = request_server(
+        "POST",
+        "/tts",
+        body=body,
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert status == 400
+    assert json.loads(response_body) == {"error": "Invalid JSON payload."}

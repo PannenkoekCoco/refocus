@@ -190,6 +190,12 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/heartbeat":
+            if self.headers.get("Origin") not in ALLOWED_ORIGINS:
+                self.send_response(403)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Origin is not allowed."}).encode("utf-8"))
+                return
             mark_trainer_active()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -199,7 +205,6 @@ class Handler(BaseHTTPRequestHandler):
 
         static_path = safe_static_path(self.path)
         if static_path:
-            mark_trainer_active()
             content_type = mimetypes.guess_type(str(static_path))[0] or "application/octet-stream"
             data = static_path.read_bytes()
             self.send_response(200)
@@ -216,6 +221,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/heartbeat":
+            if self.headers.get("Origin") not in ALLOWED_ORIGINS:
+                self.send_response(403)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Origin is not allowed."}).encode("utf-8"))
+                return
             mark_trainer_active()
             self.send_response(204)
             self.end_headers()
@@ -266,6 +277,14 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             payload = json.loads(self.rfile.read(length) or b"{}")
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Invalid JSON payload."}).encode("utf-8"))
+            return
+
+        try:
             if not isinstance(payload, dict):
                 raise ValueError("payload must be a JSON object")
             text = validate_text(payload.get("text", ""))
