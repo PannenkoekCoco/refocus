@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,10 +59,35 @@ class Settings(BaseSettings):
             (
                 self.github_app_id,
                 self.github_client_id,
-                self.github_client_secret,
-                self.github_private_key,
+                self.github_client_secret.get_secret_value() if self.github_client_secret else None,
+                self.github_private_key.get_secret_value() if self.github_private_key else None,
             )
         )
+
+    @model_validator(mode="after")
+    def production_settings_are_safe_to_deploy(self) -> "Settings":
+        if self.app_environment != "production":
+            return self
+
+        parsed_origin = urlsplit(self.app_origin)
+        if (
+            parsed_origin.scheme != "https"
+            or not parsed_origin.netloc
+            or parsed_origin.path not in ("", "/")
+            or parsed_origin.query
+            or parsed_origin.fragment
+        ):
+            raise ValueError("APP_ORIGIN must be an HTTPS origin without a path in production")
+        if not self.database_url.startswith("postgresql+psycopg://") or self.database_url == DEFAULT_DATABASE_URL:
+            raise ValueError("DATABASE_URL must point to the managed PostgreSQL database in production")
+        session_secret = self.session_secret.get_secret_value() if self.session_secret else ""
+        if len(session_secret) < 32:
+            raise ValueError("SESSION_SECRET must be at least 32 characters in production")
+        if self.session_cookie_secure is False:
+            raise ValueError("SESSION_COOKIE_SECURE cannot be disabled in production")
+        if not self.github_is_configured:
+            raise ValueError("GitHub App credentials and private key are required in production")
+        return self
 
     @property
     def github_callback_url(self) -> str:

@@ -2,6 +2,32 @@
 
 Refocus adds independently testable Node and Python tooling around the existing EMA Cram Trainer and its local TTS source.
 
+## Local container workflow
+
+The default image runs only the web service as the non-root `refocus` user. It does not bundle the optional local TTS runtime and it does not run migrations at web-process boot.
+
+For local container development, Docker Compose starts PostgreSQL, runs the one-off `migrate` service, and then starts the app bound to `127.0.0.1:8000`:
+
+```powershell
+docker compose up --build
+```
+
+The Compose credentials are development-only placeholders. Docker Desktop is required for this command; it is not a substitute for a production deployment.
+
+## Production deployment checklist
+
+Deployment intentionally waits for a user-selected Docker-compatible provider and that provider's credentials. Before releasing Refocus:
+
+- Provision managed PostgreSQL and set `DATABASE_URL` to its `postgresql+psycopg://` connection URL. Do not use the local Compose database or SQLite.
+- Set `APP_ENVIRONMENT=production`, use an HTTPS root `APP_ORIGIN` (for example `https://learn.example.com`), and terminate TLS at the chosen provider or a configured edge.
+- Set a unique, high-entropy `SESSION_SECRET`; production cookies are HttpOnly, `SameSite=Lax`, and Secure.
+- Create/configure the GitHub App with the exact callback URL `${APP_ORIGIN}/api/auth/github/callback`, then set `GITHUB_APP_ID`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `GITHUB_PRIVATE_KEY` as provider secrets. Keep the read-only permissions described below and do not enable webhooks.
+- Run `alembic upgrade head` once as the provider's pre-deploy migration step against the managed database, before web instances scale up. Do not run migrations on every web boot.
+- Deploy the Docker image with its default web command, configure the provider health check for `GET /health`, and verify it returns `200` with `{"status":"ok"}` after release.
+- Configure edge/WAF request limits and query-string redaction for operational logs. Refocus does not claim to provide a process-local production rate limiter.
+
+The app emits JSON request events containing only an event name, canonical request ID, method, path without its query string, status, and duration. Uvicorn access logs are disabled in the launcher and image so callback query values cannot bypass that policy. Do not enable untrusted forwarded-header handling unless the chosen provider gives you a bounded trusted-proxy configuration.
+
 ## Bootstrap
 
 From this directory, run:
@@ -9,7 +35,7 @@ From this directory, run:
 ```powershell
 py -3.12 -m venv backend/.venv
 backend\.venv\Scripts\python.exe -m pip install -e "backend[dev]"
-npm.cmd install
+npm.cmd ci
 npx.cmd playwright install chromium
 ```
 

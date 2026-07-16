@@ -1,0 +1,36 @@
+# Source-control and local configuration
+.git/
+.env
+.env.*
+
+# Python environments, caches, and build results
+**/.venv/
+backend/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+**/build/
+**/dist/
+.pytest_cache/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+
+# JavaScript and test output
+node_modules/
+playwright-report/
+test-results/
+coverage/
+reports/
+
+# Local-only TTS runtime and logs
+local-tts/python/
+local-tts/cache/
+local-tts/downloads/
+local-tts/__pycache__/
+local-tts/*.log
+
+# Development artifacts that never belong in a production image
+backend/tests/
+app/tests/
+.superpowers/

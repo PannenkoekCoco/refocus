@@ -8,6 +8,21 @@ from app.security.sessions import (
 )
 
 
+def production_settings(**overrides: object) -> Settings:
+    values: dict[str, object] = {
+        "app_environment": "production",
+        "app_origin": "https://learn.refocus.example",
+        "database_url": "postgresql+psycopg://refocus:password@managed-db.example/refocus",
+        "session_secret": "a" * 48,
+        "github_app_id": "12345",
+        "github_client_id": "github-client-id",
+        "github_client_secret": "github-client-secret",
+        "github_private_key": "test-private-key",
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
 def test_opaque_session_tokens_are_hashed_before_persistence() -> None:
     token, token_hash = new_session_token()
 
@@ -18,9 +33,9 @@ def test_opaque_session_tokens_are_hashed_before_persistence() -> None:
 
 def test_session_cookie_is_http_only_lax_and_secure_only_when_configured_for_tls() -> None:
     local_options = session_cookie_kwargs(Settings(app_environment="development"))
-    production_options = session_cookie_kwargs(Settings(app_environment="production"))
+    production_options = session_cookie_kwargs(production_settings())
     explicit_http_options = session_cookie_kwargs(
-        Settings(app_environment="production", session_cookie_secure=False)
+        Settings(app_environment="test", session_cookie_secure=False)
     )
 
     assert local_options["httponly"] is True
