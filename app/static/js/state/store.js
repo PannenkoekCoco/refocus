@@ -39,14 +39,51 @@ function normaliseMissionStates(value) {
   );
 }
 
+function normalisePendingProgress(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((record) => {
+    if (!isRecord(record) || !isRecord(record.payload)) return [];
+    if (record.kind === "quizAttempt") {
+      const { attemptId, lessonId, answers } = record.payload;
+      const isAnswer = (answer) => isRecord(answer)
+        && typeof answer.questionId === "string"
+        && Number.isInteger(answer.choiceIndex)
+        && typeof answer.correct === "boolean";
+      if (
+        typeof lessonId !== "string"
+        || !Array.isArray(answers)
+        || !answers.every(isAnswer)
+        || (attemptId !== undefined && typeof attemptId !== "string")
+      ) return [];
+      return [{
+        kind: "quizAttempt",
+        payload: {
+          ...(typeof attemptId === "string" ? { attemptId } : {}),
+          lessonId,
+          answers: answers.map(({ questionId, choiceIndex, correct }) => ({ questionId, choiceIndex, correct })),
+        },
+      }];
+    }
+    if (record.kind === "topicProgress") {
+      const { topicId, status } = record.payload;
+      if (typeof topicId !== "string" || !["explored", "completed"].includes(status)) return [];
+      return [{ kind: "topicProgress", payload: { topicId, status } }];
+    }
+    return [];
+  });
+}
+
 export function normaliseLearningState(value) {
   if (!isRecord(value)) return { ...EMPTY_LEARNING_STATE };
+
+  const pendingProgress = normalisePendingProgress(value.pendingProgress);
 
   return {
     pinnedTopicId: typeof value.pinnedTopicId === "string" ? value.pinnedTopicId : null,
     exploredLessonIds: uniqueStringIds(value.exploredLessonIds),
     quizAttempts: normaliseQuizAttempts(value.quizAttempts),
     missionStates: normaliseMissionStates(value.missionStates),
+    ...(pendingProgress.length > 0 ? { pendingProgress } : {}),
   };
 }
 

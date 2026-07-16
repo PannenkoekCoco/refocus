@@ -1,0 +1,65 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  PENDING_PROGRESS_MESSAGE,
+  createProgressClient,
+} from "../static/js/api/client.js";
+import { LEARNING_ROUTE_STORAGE_KEY } from "../static/js/state/store.js";
+
+function createStorage(initialValue = null) {
+  const values = new Map();
+  if (initialValue) values.set(LEARNING_ROUTE_STORAGE_KEY, JSON.stringify(initialValue));
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+}
+
+const attempt = {
+  attemptId: "5dd72f13-4d53-4a7d-9d07-c17b9e8ff89b",
+  lessonId: "apis-1",
+  answers: [{ questionId: "invalid-input", choiceIndex: 1, correct: true }],
+};
+
+test("a failed progress save keeps a narrow pending record and exposes the sync message", async () => {
+  const storage = createStorage({ pinnedTopicId: "apis" });
+  const messages = [];
+  const client = createProgressClient({
+    fetchImpl: async () => { throw new TypeError("offline"); },
+    storage,
+    onPending: (message) => messages.push(message),
+  });
+
+  const result = await client.saveQuizAttempt(attempt);
+  const persisted = JSON.parse(storage.getItem(LEARNING_ROUTE_STORAGE_KEY));
+
+  assert.equal(result, null);
+  assert.deepEqual(messages, [PENDING_PROGRESS_MESSAGE]);
+  assert.equal(PENDING_PROGRESS_MESSAGE, "Saved locally; sign in or retry to sync.");
+  assert.deepEqual(persisted.pendingProgress, [{ kind: "quizAttempt", payload: attempt }]);
+  assert.equal("session" in persisted, false);
+});
+
+test("a quiz attempt is saved before a caller refreshes recommendations", async () => {
+  const events = [];
+  const client = createProgressClient({
+    fetchImpl: async (url, options) => {
+      events.push([url, options]);
+      return {
+        ok: true,
+        json: async () => ({ id: attempt.attemptId, lessonId: attempt.lessonId, answers: attempt.answers }),
+      };
+    },
+    storage: createStorage(),
+  });
+
+  const result = await client.saveQuizAttemptAndRefresh(attempt, async () => {
+    events.push(["refresh"]);
+    return { topicId: "sql" };
+  });
+
+  assert.equal(events[0][0], "/api/progress/quiz-attempts");
+  assert.equal(events[0][1].credentials, "same-origin");
+  assert.equal(events[1][0], "refresh");
+  assert.deepEqual(result.recommendation, { topicId: "sql" });
+});

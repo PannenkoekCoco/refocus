@@ -73,6 +73,27 @@ test("persistence never claims success when storage is unavailable or rejects a 
   );
 });
 
+test("the learning cache preserves only narrow pending progress records", () => {
+  const storage = {
+    getItem: () => JSON.stringify({
+      pendingProgress: [
+        {
+          kind: "quizAttempt",
+          payload: { lessonId: "apis-1", answers: [] },
+        },
+        { kind: "session", payload: { token: "never keep this" } },
+      ],
+    }),
+  };
+
+  assert.deepEqual(loadLearningState(storage).pendingProgress, [
+    {
+      kind: "quizAttempt",
+      payload: { lessonId: "apis-1", answers: [] },
+    },
+  ]);
+});
+
 test("the store records learning progress and persists only its route key", () => {
   const store = createStore({
     pinnedTopicId: null,

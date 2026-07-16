@@ -17,6 +17,7 @@ test("a learner can pin RAG, complete an API quiz, and retain progress", async (
 
   await expect(page.getByText("Correct.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "See results" })).toBeVisible();
+  await expect(page.getByText("Saved locally; sign in or retry to sync.")).toBeVisible();
   await page.getByRole("button", { name: "See results" }).click();
   await expect(page.getByText("Quiz complete: 3/3.")).toBeVisible();
   await page.getByRole("button", { name: "Back to learning route" }).click();

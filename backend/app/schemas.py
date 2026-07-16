@@ -1,10 +1,12 @@
+from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ContentModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class HealthResponse(ContentModel):
@@ -62,3 +64,51 @@ class Lesson(ContentModel):
     sections: list[LessonSection]
     questions: list[LessonQuestion]
     starterAction: StarterAction
+
+
+class UserView(ContentModel):
+    id: UUID
+    github_login: str | None = Field(serialization_alias="githubLogin")
+
+
+class AnonymousMeResponse(ContentModel):
+    authenticated: Literal[False] = False
+
+
+class AuthenticatedMeResponse(ContentModel):
+    authenticated: Literal[True] = True
+    user: UserView
+
+
+class GithubConfigurationResponse(ContentModel):
+    code: Literal["github_not_configured"]
+
+
+class TopicProgressInput(ContentModel):
+    status: Literal["explored", "completed"]
+
+
+class TopicProgressView(ContentModel):
+    id: UUID
+    topic_id: str = Field(serialization_alias="topicId")
+    status: Literal["explored", "completed"]
+    updated_at: datetime = Field(serialization_alias="updatedAt")
+
+
+class QuizAnswerInput(ContentModel):
+    question_id: str = Field(validation_alias="questionId", serialization_alias="questionId", min_length=1, max_length=120)
+    choice_index: int = Field(validation_alias="choiceIndex", serialization_alias="choiceIndex", ge=0, le=20)
+    correct: bool
+
+
+class QuizAttemptInput(ContentModel):
+    attempt_id: UUID | None = Field(default=None, validation_alias="attemptId", serialization_alias="attemptId")
+    lesson_id: str = Field(validation_alias="lessonId", serialization_alias="lessonId", min_length=1, max_length=120)
+    answers: list[QuizAnswerInput] = Field(max_length=50)
+
+
+class QuizAttemptView(ContentModel):
+    id: UUID
+    lesson_id: str = Field(serialization_alias="lessonId")
+    answers: list[QuizAnswerInput]
+    created_at: datetime = Field(serialization_alias="createdAt")

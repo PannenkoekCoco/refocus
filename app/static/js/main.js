@@ -1,4 +1,5 @@
 import { createStatusMessage } from "./components/status-message.js";
+import { createProgressClient } from "./api/client.js";
 import { loadLesson, loadTopics } from "./content/loader.js";
 import { createTtsProvider } from "./services/tts.js";
 import {
@@ -61,6 +62,11 @@ function renderLoading(message) {
 
 const storage = getBrowserStorage();
 const store = createStore(loadLearningState(storage));
+const progressClient = createProgressClient({
+  storage,
+  fetchImpl: window.fetch.bind(window),
+  onPending: statusMessage.announce,
+});
 let latestPersistenceSucceeded = true;
 store.subscribe((state) => {
   latestPersistenceSucceeded = persistLearningState(storage, state);
@@ -240,10 +246,15 @@ function saveQuiz(result) {
     correct: result.correct,
     total: result.total,
   };
-  return dispatchLearningState(
+  const persisted = dispatchLearningState(
     { type: "recordQuiz", topicId: currentView.topic.id, attempt: quizAttempt },
     "Quiz result saved locally.",
   );
+  void progressClient.saveQuizAttempt({
+    lessonId: currentView.lesson?.topicId ?? currentView.topic.id,
+    answers: result.answers,
+  });
+  return persisted;
 }
 
 function showMission(mission) {
