@@ -22,7 +22,7 @@ if not exist "%BACKEND_PY%" (
 
 echo Starting Learning Companion at http://127.0.0.1:8000/
 pushd "%ROOT%backend"
-start "Learning Companion API" /B "%BACKEND_PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+start "Learning Companion API" /B "%BACKEND_PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 popd
 start "" "http://127.0.0.1:8000/"
 

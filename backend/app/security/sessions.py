@@ -21,3 +21,13 @@ def session_cookie_kwargs(settings: Settings) -> dict[str, object]:
         "max_age": settings.session_max_age_seconds,
         "path": "/",
     }
+
+
+def github_transaction_cookie_kwargs(settings: Settings) -> dict[str, object]:
+    return {
+        "httponly": True,
+        "samesite": "lax",
+        "secure": settings.secure_session_cookie,
+        "max_age": settings.github_oauth_max_age_seconds,
+        "path": "/api/auth/github",
+    }

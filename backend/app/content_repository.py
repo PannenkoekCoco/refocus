@@ -46,3 +46,18 @@ class ContentRepository:
             if lesson_id in authored_topic_ids and isinstance(topic_id, str) and topic_id in authored_topic_ids:
                 mapping[lesson_id] = topic_id
         return mapping
+
+    def mission(self, mission_id: str) -> dict[str, object] | None:
+        """Read a mission only from the versioned authored contract."""
+        payload = json.loads(
+            (self._content_root / "missions" / "foundation-missions.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        missions = payload.get("missions")
+        if not isinstance(missions, list):
+            return None
+        for mission in missions:
+            if isinstance(mission, dict) and mission.get("id") == mission_id:
+                return mission
+        return None

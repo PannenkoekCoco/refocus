@@ -69,7 +69,7 @@ class Lesson(ContentModel):
 
 class UserView(ContentModel):
     id: UUID
-    github_login: str | None = Field(serialization_alias="githubLogin")
+    github_connected: bool = Field(serialization_alias="githubConnected")
 
 
 class AnonymousMeResponse(ContentModel):
@@ -85,8 +85,41 @@ class GithubNotConfiguredResponse(ContentModel):
     code: Literal["github_not_configured"]
 
 
-class GithubLoginNotEnabledResponse(ContentModel):
-    code: Literal["github_login_not_enabled"]
+class GithubConnectionBusyResponse(ContentModel):
+    code: Literal["github_connection_busy"]
+
+
+class GitHubRepositoryView(ContentModel):
+    id: int
+    full_name: str = Field(serialization_alias="fullName")
+    default_branch: str = Field(serialization_alias="defaultBranch")
+    selected: bool
+
+
+class GitHubInstallationView(ContentModel):
+    id: int
+    account_login: str = Field(serialization_alias="accountLogin")
+    repositories: list[GitHubRepositoryView]
+
+
+class GitHubInstallationsResponse(ContentModel):
+    connected: bool
+    installations: list[GitHubInstallationView]
+
+
+class MissionVerificationInput(ContentModel):
+    deployment_url: str | None = Field(
+        default=None,
+        validation_alias="deploymentUrl",
+        serialization_alias="deploymentUrl",
+        max_length=2_048,
+    )
+
+
+class MissionVerificationView(ContentModel):
+    status: Literal["verified", "needs_attention"]
+    evidence: list[str]
+    reason: str | None
 
 
 class TopicProgressInput(ContentModel):

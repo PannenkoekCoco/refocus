@@ -1,4 +1,5 @@
 import { renderNarrator } from "../components/narrator.js";
+import { renderGitHubVerification } from "./github-verification.js";
 
 function createElement(tagName, text) {
   const element = document.createElement(tagName);
@@ -22,6 +23,12 @@ export function renderMission({
   onNarrationError,
   onSave,
   onBack,
+  githubConnection,
+  onConnectGitHub,
+  onSelectGitHubRepository,
+  onVerifyWithGitHub,
+  onDisconnectGitHub,
+  onStatus,
 }) {
   let approach = state?.approach === "byop" ? "byop" : "guided";
   const screen = createElement("section");
@@ -43,7 +50,7 @@ export function renderMission({
   heading.id = "mission-heading";
   const intro = createElement(
     "p",
-    "Choose a path, reflect on your work, and record your own review. Refocus does not verify repositories, pull requests, or checks.",
+    "Choose a path, reflect on your work, and record your own review. You can optionally verify authored mission evidence with a read-only GitHub connection.",
   );
   const narrator = createElement("div");
   narrator.className = "narrator";
@@ -110,6 +117,19 @@ export function renderMission({
   });
   const fallback = createElement("p", "Completion is self-reviewed, not independently verified.");
   fallback.className = "mission-note";
+  const githubVerification = createElement("div");
+  renderGitHubVerification({
+    container: githubVerification,
+    mission,
+    connection: githubConnection,
+    tts,
+    onNarrationError,
+    onConnect: onConnectGitHub,
+    onSelectRepository: onSelectGitHubRepository,
+    onVerify: onVerifyWithGitHub,
+    onDisconnect: onDisconnectGitHub,
+    onStatus,
+  });
 
   card.append(
     label,
@@ -124,6 +144,7 @@ export function renderMission({
     checklist,
     save,
     fallback,
+    githubVerification,
   );
   screen.append(backRow, card);
   container.append(screen);

@@ -15,6 +15,7 @@ BACKEND_ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.main import create_app
+from app.config import Settings
 
 
 APP_ORIGIN = "http://testserver"
@@ -33,7 +34,9 @@ def _create_schema(database_path: Path) -> None:
             PRAGMA foreign_keys = ON;
             CREATE TABLE users (
                 id CHAR(32) PRIMARY KEY,
-                github_login VARCHAR(80) UNIQUE,
+                github_user_id VARCHAR(64) UNIQUE,
+                github_authorized_at DATETIME,
+                github_verification_started_at DATETIME,
                 created_at DATETIME NOT NULL
             );
             CREATE TABLE sessions (
@@ -75,6 +78,54 @@ def _create_schema(database_path: Path) -> None:
             CREATE UNIQUE INDEX uq_focus_lenses_active_user_kind
                 ON focus_lenses (user_id, kind)
                 WHERE is_active = 1;
+            CREATE TABLE github_oauth_transactions (
+                id CHAR(32) PRIMARY KEY,
+                user_id CHAR(32) REFERENCES users(id) ON DELETE CASCADE,
+                state_hash VARCHAR(64) NOT NULL UNIQUE,
+                expires_at DATETIME NOT NULL,
+                consumed_at DATETIME,
+                created_at DATETIME NOT NULL
+            );
+            CREATE INDEX ix_github_oauth_transactions_expires_at
+                ON github_oauth_transactions (expires_at);
+            CREATE TABLE github_installations (
+                id CHAR(32) PRIMARY KEY,
+                user_id CHAR(32) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                github_installation_id BIGINT NOT NULL,
+                account_login VARCHAR(255) NOT NULL,
+                created_at DATETIME NOT NULL,
+                CONSTRAINT uq_github_installations_user_installation
+                    UNIQUE (user_id, github_installation_id)
+            );
+            CREATE TABLE github_repositories (
+                id CHAR(32) PRIMARY KEY,
+                user_id CHAR(32) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                installation_id CHAR(32) NOT NULL REFERENCES github_installations(id) ON DELETE CASCADE,
+                github_repository_id BIGINT NOT NULL,
+                full_name VARCHAR(255) NOT NULL,
+                default_branch VARCHAR(255) NOT NULL,
+                is_selected BOOLEAN NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                CONSTRAINT uq_github_repositories_user_repository
+                    UNIQUE (user_id, github_repository_id)
+            );
+            CREATE UNIQUE INDEX uq_github_repositories_selected_user
+                ON github_repositories (user_id)
+                WHERE is_selected = 1;
+            CREATE TABLE mission_verifications (
+                id CHAR(32) PRIMARY KEY,
+                user_id CHAR(32) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                mission_id VARCHAR(120) NOT NULL,
+                github_repository_id BIGINT NOT NULL,
+                status VARCHAR(32) NOT NULL,
+                evidence_json JSON NOT NULL,
+                reason TEXT,
+                checked_at DATETIME NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                CONSTRAINT uq_mission_verifications_user_mission UNIQUE (user_id, mission_id)
+            );
             """
         )
         connection.commit()
@@ -96,6 +147,33 @@ async def client(tmp_path: Path, monkeypatch) -> AsyncIterator[AsyncClient]:
         headers={"Origin": APP_ORIGIN},
     ) as async_client:
         yield async_client
+
+    engine = getattr(app.state, "database_engine", None)
+    if engine is not None:
+        await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def configured_github_client(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, object]]:
+    database_path = tmp_path / "refocus-github-test.db"
+    _create_schema(database_path)
+    app = create_app(
+        Settings(
+            database_url=f"sqlite+aiosqlite:///{database_path.as_posix()}",
+            app_origin=APP_ORIGIN,
+            github_app_id="12345",
+            github_client_id="github-client-id",
+            github_client_secret="github-client-secret",
+            github_private_key="not-used-by-the-fake-client",
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url=APP_ORIGIN,
+        headers={"Origin": APP_ORIGIN},
+        follow_redirects=False,
+    ) as async_client:
+        yield async_client, app
 
     engine = getattr(app.state, "database_engine", None)
     if engine is not None:
@@ -125,8 +203,13 @@ async def authenticated_client_factory(
         connection = sqlite3.connect(database_path)
         try:
             connection.execute(
-                "INSERT INTO users (id, github_login, created_at) VALUES (?, ?, ?)",
-                (user_id.hex, label, _utc_sql_timestamp(now)),
+                """
+                INSERT INTO users (
+                    id, github_user_id, github_authorized_at,
+                    github_verification_started_at, created_at
+                ) VALUES (?, NULL, NULL, NULL, ?)
+                """,
+                (user_id.hex, _utc_sql_timestamp(now)),
             )
             connection.execute(
                 """

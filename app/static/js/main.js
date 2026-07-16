@@ -1,5 +1,9 @@
 import { createStatusMessage } from "./components/status-message.js";
-import { createFocusLensClient, createProgressClient } from "./api/client.js";
+import {
+  createFocusLensClient,
+  createGitHubMissionClient,
+  createProgressClient,
+} from "./api/client.js";
 import { loadLesson, loadTopics } from "./content/loader.js";
 import { createTtsProvider } from "./services/tts.js";
 import {
@@ -81,6 +85,9 @@ const progressClient = createProgressClient({
 const focusLensClient = createFocusLensClient({
   fetchImpl: window.fetch.bind(window),
 });
+const githubMissionClient = createGitHubMissionClient({
+  fetchImpl: window.fetch.bind(window),
+});
 
 function dispatchLearningState(action, savedMessage) {
   store.dispatch(action);
@@ -91,6 +98,7 @@ function dispatchLearningState(action, savedMessage) {
 let topics = [];
 let missions = [];
 let focusLenses = [];
+let githubConnection = null;
 let currentView = { name: "loading" };
 
 function getRecommendation() {
@@ -196,6 +204,12 @@ function render({ moveFocus = false, focusTarget } = {}) {
       onNarrationError: statusMessage.announce,
       onSave: (missionState) => saveMission(currentView.mission, missionState),
       onBack: showRoute,
+      githubConnection,
+      onConnectGitHub: startGitHubConnection,
+      onSelectGitHubRepository: selectGitHubRepository,
+      onVerifyWithGitHub: verifyMissionWithGitHub,
+      onDisconnectGitHub: disconnectGitHub,
+      onStatus: statusMessage.announce,
     });
   }
 
@@ -284,6 +298,7 @@ async function saveQuiz(result) {
 function showMission(mission) {
   currentView = { name: "mission", mission };
   render({ moveFocus: true });
+  if (githubConnection === null) void loadGitHubConnection();
 }
 
 function saveMission(mission, missionState) {
@@ -291,6 +306,39 @@ function saveMission(mission, missionState) {
     { type: "saveMission", missionId: mission.id, missionState },
     "Mission marked self-reviewed and saved locally. It has not been independently verified.",
   );
+}
+
+async function loadGitHubConnection({ rerender = true } = {}) {
+  const connection = await githubMissionClient.listInstallations();
+  if (connection === null) return null;
+  githubConnection = connection;
+  if (rerender && currentView.name === "mission") render();
+  return connection;
+}
+
+async function startGitHubConnection() {
+  return githubMissionClient.startConnection();
+}
+
+async function selectGitHubRepository(repositoryId) {
+  const repository = await githubMissionClient.selectRepository(repositoryId);
+  if (repository === null) return null;
+  await loadGitHubConnection({ rerender: false });
+  if (currentView.name === "mission") render();
+  return repository;
+}
+
+async function verifyMissionWithGitHub(missionId, options) {
+  return githubMissionClient.verifyMission(missionId, options);
+}
+
+async function disconnectGitHub() {
+  const disconnected = await githubMissionClient.disconnect();
+  if (!disconnected) return false;
+  githubConnection = { connected: false, installations: [] };
+  if (currentView.name === "mission") render();
+  statusMessage.announce("GitHub has been disconnected. Your self-review remains available.");
+  return true;
 }
 
 function isFocusLens(value) {
@@ -365,6 +413,7 @@ async function start() {
     currentView = { name: "route" };
     render();
     void loadSavedFocusLenses();
+    void loadGitHubConnection({ rerender: false });
   } catch {
     currentView = { name: "error" };
     statusMessage.announce("Refocus could not load the local curriculum. Check that its content files are available.");

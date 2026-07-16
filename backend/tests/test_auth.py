@@ -1,9 +1,5 @@
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 import pytest
-
-from app.config import Settings
-from app.main import create_app
-
 
 @pytest.mark.asyncio
 async def test_me_is_safe_for_anonymous_learners(client: AsyncClient) -> None:
@@ -22,8 +18,8 @@ async def test_me_returns_only_a_safe_user_view_for_an_authenticated_session(
     assert response.status_code == 200
     payload = response.json()
     assert payload["authenticated"] is True
-    assert set(payload["user"]) == {"id", "githubLogin"}
-    assert payload["user"]["githubLogin"] == "learner"
+    assert set(payload["user"]) == {"id", "githubConnected"}
+    assert payload["user"]["githubConnected"] is False
 
 
 @pytest.mark.asyncio
@@ -44,28 +40,15 @@ async def test_github_login_is_guarded_until_all_app_settings_exist(client: Asyn
 
 
 @pytest.mark.asyncio
-async def test_configured_github_login_returns_the_typed_not_enabled_contract() -> None:
-    app = create_app(
-        Settings(
-            database_url="sqlite+aiosqlite:///:memory:",
-            github_app_id="12345",
-            github_client_id="client-id",
-            github_client_secret="client-secret",
-            github_private_key="private-key",
-        )
-    )
-    try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as configured_client:
-            response = await configured_client.get("/api/auth/github/login")
-    finally:
-        await app.state.database_engine.dispose()
+async def test_configured_github_login_starts_the_server_side_authorization_flow(
+    configured_github_client,
+) -> None:
+    configured_client, _app = configured_github_client
 
-    assert response.status_code == 501
-    assert response.headers["content-type"].startswith("application/json")
-    assert response.json() == {"code": "github_login_not_enabled"}
+    response = await configured_client.get("/api/auth/github/login")
+
+    assert response.status_code == 307
+    assert response.headers["location"].startswith("https://github.com/login/oauth/authorize?")
 
 
 @pytest.mark.asyncio

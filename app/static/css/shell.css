@@ -6,7 +6,9 @@ body {
 }
 
 button,
-textarea {
+textarea,
+input,
+select {
   font: inherit;
 }
 
@@ -54,6 +56,8 @@ a {
 a:focus-visible,
 button:focus-visible,
 textarea:focus-visible,
+input:focus-visible,
+select:focus-visible,
 h2[tabindex="-1"]:focus-visible {
   outline: 4px solid var(--color-focus);
   outline-offset: 3px;

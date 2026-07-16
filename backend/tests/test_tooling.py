@@ -63,6 +63,9 @@ def test_noneditable_wheel_includes_the_services_package(tmp_path: Path) -> None
     assert "app/services/__init__.py" in contents
     assert "app/services/recommendations.py" in contents
     assert "app/services/focus_lenses.py" in contents
+    assert "app/services/github_client.py" in contents
+    assert "app/services/github_connections.py" in contents
+    assert "app/services/github_verifier.py" in contents
 
 
 def test_environment_example_documents_safe_session_cookie_defaults() -> None:
