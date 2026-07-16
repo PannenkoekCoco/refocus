@@ -1,7 +1,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
-from fastapi.responses import JSONResponse
 
 from app.dependencies import (
     DatabaseSession,
@@ -13,7 +12,8 @@ from app.models import User, utcnow
 from app.schemas import (
     AnonymousMeResponse,
     AuthenticatedMeResponse,
-    GithubConfigurationResponse,
+    GithubLoginNotEnabledResponse,
+    GithubNotConfiguredResponse,
     UserView,
 )
 
@@ -40,12 +40,20 @@ async def logout(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/auth/github/login", response_model=GithubConfigurationResponse)
-async def github_login(settings: SettingsDependency) -> JSONResponse:
+@router.get(
+    "/auth/github/login",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    response_model=GithubNotConfiguredResponse | GithubLoginNotEnabledResponse,
+    responses={
+        status.HTTP_501_NOT_IMPLEMENTED: {"model": GithubLoginNotEnabledResponse},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": GithubNotConfiguredResponse},
+    },
+)
+async def github_login(
+    response: Response,
+    settings: SettingsDependency,
+) -> GithubNotConfiguredResponse | GithubLoginNotEnabledResponse:
     if not settings.github_is_configured:
-        payload = GithubConfigurationResponse(code="github_not_configured")
-        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=payload.model_dump())
-    return JSONResponse(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        content={"code": "github_login_not_implemented"},
-    )
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return GithubNotConfiguredResponse(code="github_not_configured")
+    return GithubLoginNotEnabledResponse(code="github_login_not_enabled")

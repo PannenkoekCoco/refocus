@@ -4,6 +4,7 @@ import {
 } from "../state/store.js";
 
 export const PENDING_PROGRESS_MESSAGE = "Saved locally; sign in or retry to sync.";
+export const LOCAL_PROGRESS_UNAVAILABLE_MESSAGE = "Progress could not be saved locally. It is available for this session only.";
 
 function defaultStorage() {
   try {
@@ -26,7 +27,11 @@ function appendPendingProgress(storage, record) {
     ...(state.pendingProgress ?? []).filter((candidate) => !sameRecord(candidate)),
     record,
   ];
-  persistLearningState(storage, { ...state, pendingProgress });
+  return persistLearningState(storage, { ...state, pendingProgress });
+}
+
+function announcePendingPersistence(onPending, persisted) {
+  onPending(persisted ? PENDING_PROGRESS_MESSAGE : LOCAL_PROGRESS_UNAVAILABLE_MESSAGE);
 }
 
 export function createProgressClient({
@@ -50,8 +55,10 @@ export function createProgressClient({
       if (!response.ok) throw new Error("Progress sync failed");
       return await response.json();
     } catch {
-      appendPendingProgress(storage, { kind: "quizAttempt", payload });
-      onPending(PENDING_PROGRESS_MESSAGE);
+      announcePendingPersistence(
+        onPending,
+        appendPendingProgress(storage, { kind: "quizAttempt", payload }),
+      );
       return null;
     }
   }
@@ -68,8 +75,10 @@ export function createProgressClient({
       if (!response.ok) throw new Error("Progress sync failed");
       return await response.json();
     } catch {
-      appendPendingProgress(storage, { kind: "topicProgress", payload: { topicId, status } });
-      onPending(PENDING_PROGRESS_MESSAGE);
+      announcePendingPersistence(
+        onPending,
+        appendPendingProgress(storage, { kind: "topicProgress", payload: { topicId, status } }),
+      );
       return null;
     }
   }

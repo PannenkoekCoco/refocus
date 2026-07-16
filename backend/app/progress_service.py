@@ -1,10 +1,22 @@
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import QuizAttempt, TopicProgress
+from app.models import QuizAttempt, TopicProgress, utcnow
 from app.schemas import QuizAttemptInput
+
+
+def conflict_aware_insert(database: AsyncSession, model: type[Any]) -> Any:
+    dialect_name = database.get_bind().dialect.name
+    if dialect_name == "postgresql":
+        return postgresql_insert(model)
+    if dialect_name == "sqlite":
+        return sqlite_insert(model)
+    raise RuntimeError(f"Unsupported progress persistence database: {dialect_name}")
 
 
 async def upsert_topic_progress(
@@ -14,22 +26,30 @@ async def upsert_topic_progress(
     topic_id: str,
     status: str,
 ) -> TopicProgress:
-    result = await database.execute(
+    now = utcnow()
+    statement = (
+        conflict_aware_insert(database, TopicProgress)
+        .values(
+            id=uuid4(),
+            user_id=user_id,
+            topic_id=topic_id,
+            status=status,
+            created_at=now,
+            updated_at=now,
+        )
+        .on_conflict_do_update(
+            index_elements=["user_id", "topic_id"],
+            set_={"status": status, "updated_at": now},
+        )
+    )
+    await database.execute(statement)
+    await database.commit()
+    return (await database.execute(
         select(TopicProgress).where(
             TopicProgress.user_id == user_id,
             TopicProgress.topic_id == topic_id,
         )
-    )
-    progress = result.scalar_one_or_none()
-    if progress is None:
-        progress = TopicProgress(user_id=user_id, topic_id=topic_id, status=status)
-        database.add(progress)
-    else:
-        progress.status = status
-
-    await database.commit()
-    await database.refresh(progress)
-    return progress
+    )).scalar_one()
 
 
 async def get_topic_progress(
@@ -53,24 +73,24 @@ async def create_quiz_attempt(
     user_id: UUID,
     payload: QuizAttemptInput,
 ) -> tuple[QuizAttempt, bool]:
-    if payload.attempt_id is not None:
-        result = await database.execute(
-            select(QuizAttempt).where(
-                QuizAttempt.client_attempt_id == payload.attempt_id,
-                QuizAttempt.user_id == user_id,
-            )
+    statement = (
+        conflict_aware_insert(database, QuizAttempt)
+        .values(
+            id=uuid4(),
+            user_id=user_id,
+            client_attempt_id=payload.attempt_id,
+            lesson_id=payload.lesson_id,
+            answers_json=[answer.model_dump(by_alias=True) for answer in payload.answers],
         )
-        existing_attempt = result.scalar_one_or_none()
-        if existing_attempt is not None:
-            return existing_attempt, False
-
-    quiz_attempt = QuizAttempt(
-        user_id=user_id,
-        client_attempt_id=payload.attempt_id,
-        lesson_id=payload.lesson_id,
-        answers_json=[answer.model_dump(by_alias=True) for answer in payload.answers],
+        .on_conflict_do_nothing(index_elements=["user_id", "client_attempt_id"])
+        .returning(QuizAttempt.id)
     )
-    database.add(quiz_attempt)
+    inserted_id = (await database.execute(statement)).scalar_one_or_none()
     await database.commit()
-    await database.refresh(quiz_attempt)
-    return quiz_attempt, True
+    quiz_attempt = (await database.execute(
+        select(QuizAttempt).where(
+            QuizAttempt.user_id == user_id,
+            QuizAttempt.client_attempt_id == payload.attempt_id,
+        )
+    )).scalar_one()
+    return quiz_attempt, inserted_id is not None

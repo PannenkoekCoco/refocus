@@ -28,6 +28,58 @@ test("a learner can pin RAG, complete an API quiz, and retain progress", async (
   await expect(page.getByText("Quiz complete: 3/3.")).toBeVisible();
 });
 
+test("topic exploration syncs and quiz results wait for the attempted progress save", async ({ page }) => {
+  const progressRequests = [];
+  let releaseQuizSave;
+  const quizSaveCanFinish = new Promise((resolve) => {
+    releaseQuizSave = resolve;
+  });
+
+  await page.route("**/api/progress/**", async (route) => {
+    const method = route.request().method();
+    progressRequests.push(method);
+    if (method === "PUT") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "00000000-0000-0000-0000-000000000001",
+          topicId: "apis",
+          status: "explored",
+          updatedAt: "2026-07-16T00:00:00Z",
+        }),
+      });
+      return;
+    }
+
+    await quizSaveCanFinish;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({}),
+    });
+  });
+
+  await page.goto("./");
+  await page.getByRole("button", { name: "Open APIs" }).click();
+  await expect.poll(() => progressRequests).toContain("PUT");
+  await page.getByRole("button", { name: "Start quiz" }).click();
+
+  for (let questionIndex = 0; questionIndex < 3; questionIndex += 1) {
+    await page.getByRole("button", { name: /^B\./ }).click();
+    if (questionIndex < 2) {
+      await page.getByRole("button", { name: "Next question" }).click();
+    }
+  }
+
+  await page.getByRole("button", { name: "See results" }).click();
+  await expect(page.getByRole("heading", { name: "Quiz complete: 3/3." })).not.toBeVisible();
+  expect(progressRequests).toEqual(["PUT", "POST"]);
+
+  releaseQuizSave();
+  await expect(page.getByRole("heading", { name: "Quiz complete: 3/3." })).toBeVisible();
+});
+
 test("pinning keeps focus on the replacement pin control", async ({ page }) => {
   await page.goto("./");
   await page.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();

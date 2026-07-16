@@ -40,6 +40,26 @@ test("a failed progress save keeps a narrow pending record and exposes the sync 
   assert.equal("session" in persisted, false);
 });
 
+test("a failed progress save does not claim a local sync record when storage rejects it", async () => {
+  const messages = [];
+  const storage = {
+    getItem: () => null,
+    setItem: () => { throw new Error("storage blocked"); },
+  };
+  const client = createProgressClient({
+    fetchImpl: async () => { throw new TypeError("offline"); },
+    storage,
+    onPending: (message) => messages.push(message),
+  });
+
+  const result = await client.saveQuizAttempt(attempt);
+
+  assert.equal(result, null);
+  assert.deepEqual(messages, [
+    "Progress could not be saved locally. It is available for this session only.",
+  ]);
+});
+
 test("a quiz attempt is saved before a caller refreshes recommendations", async () => {
   const events = [];
   const client = createProgressClient({

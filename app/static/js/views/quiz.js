@@ -133,10 +133,18 @@ export function renderQuiz({
 
         if (question.id === lesson.questions.at(-1).id) {
           const result = session.result();
-          const savedLocally = onComplete(result) !== false;
+          const completion = Promise.resolve(onComplete(result));
           const seeResults = createElement("button", "See results");
           seeResults.type = "button";
-          seeResults.addEventListener("click", () => showResult(result, savedLocally));
+          seeResults.addEventListener("click", async () => {
+            seeResults.disabled = true;
+            try {
+              const savedLocally = await completion;
+              showResult(result, savedLocally !== false);
+            } catch {
+              showResult(result, false);
+            }
+          });
           feedbackCard.append(seeResults);
           card.append(feedbackCard);
           focusElement(feedbackCard);

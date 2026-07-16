@@ -56,7 +56,7 @@ def _create_schema(database_path: Path) -> None:
             CREATE TABLE quiz_attempts (
                 id CHAR(32) PRIMARY KEY,
                 user_id CHAR(32) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                client_attempt_id CHAR(32),
+                client_attempt_id CHAR(32) NOT NULL,
                 lesson_id VARCHAR(120) NOT NULL,
                 answers_json JSON NOT NULL,
                 created_at DATETIME NOT NULL,

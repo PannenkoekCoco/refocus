@@ -50,7 +50,7 @@ def upgrade() -> None:
     op.create_table("quiz_attempts",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("user_id", sa.Uuid(), nullable=False),
-        sa.Column("client_attempt_id", sa.Uuid(), nullable=True),
+        sa.Column("client_attempt_id", sa.Uuid(), nullable=False),
         sa.Column("lesson_id", sa.String(length=120), nullable=False),
         sa.Column("answers_json", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

@@ -1,3 +1,4 @@
+import asyncio
 from uuid import uuid4
 
 from httpx import AsyncClient
@@ -73,6 +74,50 @@ async def test_quiz_attempts_are_owned_and_deduplicated_by_client_attempt_id(
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
     assert set(first.json()) == {"id", "lessonId", "answers", "createdAt"}
+
+
+@pytest.mark.asyncio
+async def test_authenticated_quiz_attempt_requires_a_client_generated_attempt_id(
+    authenticated_client: AsyncClient,
+) -> None:
+    response = await authenticated_client.post(
+        "/api/progress/quiz-attempts",
+        json={
+            "lessonId": "apis-1",
+            "answers": [{"questionId": "invalid-input", "choiceIndex": 1, "correct": True}],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_concurrent_quiz_retries_return_one_created_attempt_and_one_existing_attempt(
+    authenticated_client: AsyncClient,
+) -> None:
+    payload = quiz_attempt_payload()
+
+    first, second = await asyncio.gather(
+        authenticated_client.post("/api/progress/quiz-attempts", json=payload),
+        authenticated_client.post("/api/progress/quiz-attempts", json=payload),
+    )
+
+    assert sorted((first.status_code, second.status_code)) == [200, 201]
+    assert first.json()["id"] == second.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_topic_saves_do_not_surface_a_uniqueness_error(
+    authenticated_client: AsyncClient,
+) -> None:
+    first, second = await asyncio.gather(
+        authenticated_client.put("/api/progress/topic/apis", json={"status": "explored"}),
+        authenticated_client.put("/api/progress/topic/apis", json={"status": "explored"}),
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["id"] == second.json()["id"]
 
 
 @pytest.mark.asyncio

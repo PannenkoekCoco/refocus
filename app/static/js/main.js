@@ -220,6 +220,7 @@ async function openTopic(node) {
   if (!topic) return;
 
   dispatchLearningState({ type: "exploreLesson", topicId: topic.id }, `${topic.title} is marked as explored.`);
+  void progressClient.saveTopicProgress(topic.id, "explored");
   if (topic.contentStatus !== "full") {
     showLesson(topic, null);
     return;
@@ -241,7 +242,7 @@ function showQuiz(topic, lesson) {
   render({ moveFocus: true });
 }
 
-function saveQuiz(result) {
+async function saveQuiz(result) {
   const quizAttempt = {
     correct: result.correct,
     total: result.total,
@@ -250,7 +251,7 @@ function saveQuiz(result) {
     { type: "recordQuiz", topicId: currentView.topic.id, attempt: quizAttempt },
     "Quiz result saved locally.",
   );
-  void progressClient.saveQuizAttempt({
+  await progressClient.saveQuizAttempt({
     lessonId: currentView.lesson?.topicId ?? currentView.topic.id,
     answers: result.answers,
   });

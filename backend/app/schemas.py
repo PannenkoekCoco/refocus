@@ -80,8 +80,12 @@ class AuthenticatedMeResponse(ContentModel):
     user: UserView
 
 
-class GithubConfigurationResponse(ContentModel):
+class GithubNotConfiguredResponse(ContentModel):
     code: Literal["github_not_configured"]
+
+
+class GithubLoginNotEnabledResponse(ContentModel):
+    code: Literal["github_login_not_enabled"]
 
 
 class TopicProgressInput(ContentModel):
@@ -102,7 +106,7 @@ class QuizAnswerInput(ContentModel):
 
 
 class QuizAttemptInput(ContentModel):
-    attempt_id: UUID | None = Field(default=None, validation_alias="attemptId", serialization_alias="attemptId")
+    attempt_id: UUID = Field(validation_alias="attemptId", serialization_alias="attemptId")
     lesson_id: str = Field(validation_alias="lessonId", serialization_alias="lessonId", min_length=1, max_length=120)
     answers: list[QuizAnswerInput] = Field(max_length=50)
 

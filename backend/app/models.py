@@ -64,7 +64,7 @@ class QuizAttempt(Base):
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    client_attempt_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    client_attempt_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     lesson_id: Mapped[str] = mapped_column(String(120), nullable=False)
     answers_json: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
