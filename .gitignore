@@ -1,0 +1,23 @@
+# Python and test artifacts
+backend/.venv/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+__pycache__/
+*.py[cod]
+
+# Node and browser test artifacts
+node_modules/
+playwright-report/
+test-results/
+
+# Runtime-only local TTS material
+local-tts/python/
+local-tts/cache/
+local-tts/downloads/
+local-tts/__pycache__/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example

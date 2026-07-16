@@ -1,0 +1,13 @@
+{
+  "name": "refocus",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:unit": "node --test app/tests/*.test.mjs",
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}
