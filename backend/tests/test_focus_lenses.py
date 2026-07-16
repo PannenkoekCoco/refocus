@@ -134,6 +134,53 @@ async def test_replacing_an_active_lens_retains_inactive_history_and_allows_both
 
 
 @pytest.mark.asyncio
+async def test_active_lens_patch_retries_a_unique_collision_without_expired_orm_access(
+    authenticated_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = await authenticated_client.post(
+        "/api/focus-lenses",
+        json=lens_payload(original_text="First job lens"),
+    )
+    second = await authenticated_client.post(
+        "/api/focus-lenses",
+        json=lens_payload(original_text="Second job lens"),
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    from app.services import focus_lenses
+
+    real_deactivate = focus_lenses._deactivate_existing_lenses
+    deactivation_attempts = 0
+
+    async def interleaved_deactivate(*args, **kwargs) -> None:
+        nonlocal deactivation_attempts
+        deactivation_attempts += 1
+        if deactivation_attempts == 1:
+            return
+        await real_deactivate(*args, **kwargs)
+
+    monkeypatch.setattr(focus_lenses, "_deactivate_existing_lenses", interleaved_deactivate)
+
+    response = await authenticated_client.patch(
+        f"/api/focus-lenses/{first.json()['id']}",
+        json={"isActive": True},
+    )
+    listed = await authenticated_client.get("/api/focus-lenses")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == first.json()["id"]
+    assert deactivation_attempts == 2
+    active_jobs = [
+        lens["id"]
+        for lens in listed.json()["lenses"]
+        if lens["kind"] == "job" and lens["isActive"]
+    ]
+    assert active_jobs == [first.json()["id"]]
+
+
+@pytest.mark.asyncio
 async def test_concurrent_active_lens_replacements_leave_exactly_one_active_lens(
     authenticated_client: AsyncClient,
 ) -> None:

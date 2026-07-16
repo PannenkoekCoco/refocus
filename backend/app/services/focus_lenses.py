@@ -120,14 +120,17 @@ async def update_focus_lens(
     payload: FocusLensPatch,
 ) -> FocusLens:
     """Update only mutable lens fields and safely replace another active lens when needed."""
+    lens_id = lens.id
+    lens_user_id = lens.user_id
+    lens_kind = lens.kind
     for attempt in range(2):
         try:
             if payload.is_active is True:
                 await _deactivate_existing_lenses(
                     database,
-                    user_id=lens.user_id,
-                    kind=lens.kind,
-                    exclude_lens_id=lens.id,
+                    user_id=lens_user_id,
+                    kind=lens_kind,
+                    exclude_lens_id=lens_id,
                 )
             if payload.original_text is not None:
                 lens.original_text = payload.original_text
@@ -143,7 +146,7 @@ async def update_focus_lens(
             await database.rollback()
             if payload.is_active is not True or attempt == 1:
                 raise FocusLensConflictError("Focus lens update conflicted") from error
-            refreshed = await get_focus_lens(database, user_id=lens.user_id, lens_id=lens.id)
+            refreshed = await get_focus_lens(database, user_id=lens_user_id, lens_id=lens_id)
             if refreshed is None:
                 raise FocusLensConflictError("Focus lens update conflicted") from error
             lens = refreshed
