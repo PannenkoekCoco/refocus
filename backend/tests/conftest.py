@@ -88,6 +88,12 @@ def _create_schema(database_path: Path) -> None:
             );
             CREATE INDEX ix_github_oauth_transactions_expires_at
                 ON github_oauth_transactions (expires_at);
+            CREATE TABLE github_oauth_transaction_slots (
+                slot_number INTEGER PRIMARY KEY
+                    CHECK (slot_number >= 1 AND slot_number <= 10000),
+                transaction_id CHAR(32) UNIQUE
+                    REFERENCES github_oauth_transactions(id) ON DELETE SET NULL
+            );
             CREATE TABLE github_installations (
                 id CHAR(32) PRIMARY KEY,
                 user_id CHAR(32) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -126,6 +132,19 @@ def _create_schema(database_path: Path) -> None:
                 updated_at DATETIME NOT NULL,
                 CONSTRAINT uq_mission_verifications_user_mission UNIQUE (user_id, mission_id)
             );
+            """
+        )
+        connection.execute(
+            """
+            WITH RECURSIVE slot_numbers(slot_number) AS (
+                SELECT 1
+                UNION ALL
+                SELECT slot_number + 1
+                FROM slot_numbers
+                WHERE slot_number < 10000
+            )
+            INSERT INTO github_oauth_transaction_slots (slot_number)
+            SELECT slot_number FROM slot_numbers
             """
         )
         connection.commit()

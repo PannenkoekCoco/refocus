@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint, Uuid, text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, Uuid, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -113,6 +113,28 @@ class GitHubOAuthTransaction(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class GitHubOAuthTransactionSlot(Base):
+    """A finite database-owned reservation used to bound public OAuth starts."""
+
+    __tablename__ = "github_oauth_transaction_slots"
+    __table_args__ = (
+        CheckConstraint(
+            "slot_number >= 1 AND slot_number <= 10000",
+            name="ck_github_oauth_transaction_slots_number",
+        ),
+        UniqueConstraint(
+            "transaction_id",
+            name="uq_github_oauth_transaction_slots_transaction",
+        ),
+    )
+
+    slot_number: Mapped[int] = mapped_column(Integer, primary_key=True)
+    transaction_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("github_oauth_transactions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
 
 class GitHubInstallation(Base):

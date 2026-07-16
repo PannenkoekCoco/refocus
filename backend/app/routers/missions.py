@@ -1,4 +1,3 @@
-import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
@@ -10,6 +9,7 @@ from app.services.github_client import (
     GitHubClient,
     GitHubClientError,
     RepositorySnapshot,
+    run_with_github_operation_deadline,
 )
 from app.services.github_connections import (
     github_authorization_is_fresh,
@@ -85,18 +85,23 @@ async def verify_portfolio_mission(
         full_name=selected_repository.full_name,
         default_branch=selected_repository.default_branch,
     )
-    try:
-        async with asyncio.timeout(settings.github_verification_timeout_seconds):
-            evidence_client = await _github_client(request, settings).repository_client(
+    async def verify_with_github() -> VerificationResult:
+        evidence_client = await _github_client(request, settings).repository_client(
                 installation_id=installation.github_installation_id,
                 repository=repository_snapshot,
             )
-            result = await verify_mission(
-                client=evidence_client,
-                repository_id=selected_repository.github_repository_id,
-                evidence=evidence,
-                deployment_url=payload.deployment_url,
-            )
+        return await verify_mission(
+            client=evidence_client,
+            repository_id=selected_repository.github_repository_id,
+            evidence=evidence,
+            deployment_url=payload.deployment_url,
+        )
+
+    try:
+        result = await run_with_github_operation_deadline(
+            verify_with_github(),
+            timeout_seconds=settings.github_verification_timeout_seconds,
+        )
     except (GitHubClientError, TimeoutError, ValueError):
         result = VerificationResult(
             status="needs_attention",

@@ -1,4 +1,3 @@
-import asyncio
 import hmac
 from datetime import timedelta
 from typing import Annotated
@@ -31,10 +30,12 @@ from app.services.github_client import (
     GITHUB_AUTHORIZE_URL,
     GitHubClient,
     GitHubClientError,
+    run_with_github_operation_deadline,
 )
 from app.services.github_connections import (
     consume_oauth_transaction,
     create_oauth_transaction,
+    discard_oauth_transaction,
     github_authorization_is_fresh,
     new_oauth_transaction_secrets,
     OAuthTransactionLimitError,
@@ -176,17 +177,21 @@ async def github_callback(
     if transaction is None:
         return response
     if transaction.user_id != (current_user.id if current_user is not None else None):
+        await discard_oauth_transaction(database, transaction_id=transaction.id)
         return response
     if not code or len(code) > 2_048:
+        await discard_oauth_transaction(database, transaction_id=transaction.id)
         return response
 
     raw_session_token: str | None = None
     try:
-        async with asyncio.timeout(settings.github_callback_timeout_seconds):
-            snapshot = await _github_client(request, settings).authorization_snapshot(
+        snapshot = await run_with_github_operation_deadline(
+            _github_client(request, settings).authorization_snapshot(
                 code=code,
                 code_verifier=code_verifier,
-            )
+            ),
+            timeout_seconds=settings.github_callback_timeout_seconds,
+        )
         user = await persist_authorization_snapshot(
             database,
             snapshot=snapshot,
@@ -205,6 +210,7 @@ async def github_callback(
             await database.commit()
     except (GitHubClientError, IntegrityError, TimeoutError, ValueError):
         await database.rollback()
+        await discard_oauth_transaction(database, transaction_id=transaction.id)
         return response
 
     if raw_session_token is not None:
@@ -213,4 +219,5 @@ async def github_callback(
             raw_session_token,
             **session_cookie_kwargs(settings),
         )
+    await discard_oauth_transaction(database, transaction_id=transaction.id)
     return response

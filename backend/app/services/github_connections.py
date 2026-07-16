@@ -7,12 +7,13 @@ from dataclasses import dataclass
 from datetime import UTC, timedelta
 from uuid import UUID
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     GitHubInstallation,
     GitHubOAuthTransaction,
+    GitHubOAuthTransactionSlot,
     GitHubRepository,
     MissionVerification,
     User,
@@ -56,6 +57,44 @@ def oauth_state_hash(state: str) -> str:
     return hashlib.sha256(state.encode("utf-8")).hexdigest()
 
 
+async def _delete_oauth_transactions(database: AsyncSession, condition) -> None:
+    """Free slot reservations explicitly before removing transient OAuth state."""
+    transaction_ids = select(GitHubOAuthTransaction.id).where(condition)
+    await database.execute(
+        update(GitHubOAuthTransactionSlot)
+        .where(GitHubOAuthTransactionSlot.transaction_id.in_(transaction_ids))
+        .values(transaction_id=None)
+    )
+    await database.execute(delete(GitHubOAuthTransaction).where(condition))
+
+
+async def _claim_oauth_transaction_slot(
+    database: AsyncSession,
+    *,
+    transaction_id: UUID,
+    max_pending_transactions: int,
+) -> bool:
+    available_slot = (
+        select(GitHubOAuthTransactionSlot.slot_number)
+        .where(
+            GitHubOAuthTransactionSlot.slot_number <= max_pending_transactions,
+            GitHubOAuthTransactionSlot.transaction_id.is_(None),
+        )
+        .order_by(GitHubOAuthTransactionSlot.slot_number)
+        .limit(1)
+        .scalar_subquery()
+    )
+    result = await database.execute(
+        update(GitHubOAuthTransactionSlot)
+        .where(
+            GitHubOAuthTransactionSlot.slot_number == available_slot,
+            GitHubOAuthTransactionSlot.transaction_id.is_(None),
+        )
+        .values(transaction_id=transaction_id)
+    )
+    return result.rowcount == 1
+
+
 async def create_oauth_transaction(
     database: AsyncSession,
     *,
@@ -66,32 +105,42 @@ async def create_oauth_transaction(
     max_pending_transactions: int,
 ) -> None:
     now = utcnow()
-    await database.execute(
-        delete(GitHubOAuthTransaction).where(GitHubOAuthTransaction.expires_at <= now)
+    await _delete_oauth_transactions(
+        database,
+        GitHubOAuthTransaction.expires_at <= now,
     )
     if previous_state is not None and len(previous_state) <= 512:
-        await database.execute(
-            delete(GitHubOAuthTransaction).where(
-                GitHubOAuthTransaction.state_hash == oauth_state_hash(previous_state)
-            )
+        await _delete_oauth_transactions(
+            database,
+            GitHubOAuthTransaction.state_hash == oauth_state_hash(previous_state),
         )
-    pending_transactions = (
-        await database.execute(
-            select(func.count(GitHubOAuthTransaction.id)).where(
-                GitHubOAuthTransaction.expires_at > now,
-                GitHubOAuthTransaction.consumed_at.is_(None),
-            )
-        )
-    ).scalar_one()
-    if pending_transactions >= max_pending_transactions:
-        await database.commit()
-        raise OAuthTransactionLimitError()
-    database.add(
-        GitHubOAuthTransaction(
-            user_id=user_id,
-            state_hash=oauth_state_hash(state),
-            expires_at=now + timedelta(seconds=max_age_seconds),
-        )
+    transaction = GitHubOAuthTransaction(
+        user_id=user_id,
+        state_hash=oauth_state_hash(state),
+        expires_at=now + timedelta(seconds=max_age_seconds),
+    )
+    database.add(transaction)
+    await database.flush()
+    for _ in range(max_pending_transactions):
+        if await _claim_oauth_transaction_slot(
+            database,
+            transaction_id=transaction.id,
+            max_pending_transactions=max_pending_transactions,
+        ):
+            await database.commit()
+            return
+    await database.rollback()
+    raise OAuthTransactionLimitError()
+
+
+async def discard_oauth_transaction(
+    database: AsyncSession,
+    *,
+    transaction_id: UUID,
+) -> None:
+    await _delete_oauth_transactions(
+        database,
+        GitHubOAuthTransaction.id == transaction_id,
     )
     await database.commit()
 
@@ -426,8 +475,9 @@ async def disconnect_github(
     if locked_user is None:
         await database.rollback()
         return
-    await database.execute(
-        delete(GitHubOAuthTransaction).where(GitHubOAuthTransaction.user_id == locked_user.id)
+    await _delete_oauth_transactions(
+        database,
+        GitHubOAuthTransaction.user_id == locked_user.id,
     )
     await database.execute(delete(MissionVerification).where(MissionVerification.user_id == locked_user.id))
     installation_ids = select(GitHubInstallation.id).where(GitHubInstallation.user_id == locked_user.id)

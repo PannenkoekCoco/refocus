@@ -64,6 +64,19 @@ def test_github_mission_migration_keeps_only_safe_connection_metadata() -> None:
     assert "sqlite_where" in text
 
 
+def test_github_oauth_capacity_migration_reserves_database_owned_slots() -> None:
+    migration = Path(__file__).parents[1] / "alembic" / "versions" / "0004_oauth_transaction_slots.py"
+
+    assert migration.exists()
+    text = migration.read_text(encoding="utf-8")
+    assert 'revision: str = "0004_oauth_transaction_slots"' in text
+    assert 'down_revision: str | None = "0003_github_missions"' in text
+    assert '"github_oauth_transaction_slots"' in text
+    assert '"transaction_id"' in text
+    assert 'ondelete="SET NULL"' in text
+    assert "10000" in text
+
+
 def test_all_migrations_apply_on_sqlite_for_local_development(tmp_path: Path) -> None:
     backend_root = Path(__file__).parents[1]
     database_path = tmp_path / "refocus-migrations.db"
@@ -87,6 +100,12 @@ def test_all_migrations_apply_on_sqlite_for_local_development(tmp_path: Path) ->
         transaction_foreign_keys = list(
             connection.execute("PRAGMA foreign_key_list(github_oauth_transactions)")
         )
+        transaction_slot_foreign_keys = list(
+            connection.execute("PRAGMA foreign_key_list(github_oauth_transaction_slots)")
+        )
+        transaction_slot_count = connection.execute(
+            "SELECT COUNT(*) FROM github_oauth_transaction_slots"
+        ).fetchone()[0]
     finally:
         connection.close()
 
@@ -95,4 +114,9 @@ def test_all_migrations_apply_on_sqlite_for_local_development(tmp_path: Path) ->
     assert any(
         foreign_key[3] == "user_id" and foreign_key[6].upper() == "CASCADE"
         for foreign_key in transaction_foreign_keys
+    )
+    assert transaction_slot_count == 10_000
+    assert any(
+        foreign_key[3] == "transaction_id" and foreign_key[6].upper() == "SET NULL"
+        for foreign_key in transaction_slot_foreign_keys
     )

@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     github_oauth_max_age_seconds: int = Field(default=10 * 60, ge=60, le=60 * 60)
     github_oauth_max_pending_transactions: int = Field(default=1_000, ge=1, le=10_000)
     github_authorization_max_age_seconds: int = Field(default=15 * 60, ge=60, le=24 * 60 * 60)
-    github_callback_timeout_seconds: int = Field(default=20, ge=5, le=60)
-    github_verification_timeout_seconds: int = Field(default=20, ge=5, le=60)
+    github_callback_timeout_seconds: int = Field(default=15, ge=5, le=60)
+    github_verification_timeout_seconds: int = Field(default=15, ge=5, le=60)
     github_verification_min_interval_seconds: int = Field(default=60, ge=1, le=60 * 60)
     content_root: Path = Path(__file__).parents[2] / "content"
     static_root: Path = Path(__file__).parents[2] / "app" / "static"

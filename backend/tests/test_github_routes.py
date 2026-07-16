@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
@@ -5,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 import pytest
 from sqlalchemy import func, select, update
 
+import app.services.github_client as github_client_module
 from app.models import (
     GitHubOAuthTransaction,
     GitHubRepository,
@@ -14,6 +16,7 @@ from app.models import (
     User,
 )
 from app.security.sessions import new_session_token
+from app.services.github_connections import OAuthTransactionLimitError, create_oauth_transaction
 from app.services.github_client import (
     AuthorizationSnapshot,
     GitHubProviderUnavailableError,
@@ -89,6 +92,63 @@ class FakeGitHub:
             raise GitHubProviderUnavailableError()
         self.repository_calls.append((installation_id, repository))
         return self.evidence
+
+
+class BlockingAuthorizationGitHub:
+    def __init__(self) -> None:
+        self.cancelled = asyncio.Event()
+
+    async def authorization_snapshot(self, *, code: str, code_verifier: str) -> AuthorizationSnapshot:
+        del code, code_verifier
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+
+
+class BlockingVerificationGitHub:
+    def __init__(self) -> None:
+        self.cancelled = asyncio.Event()
+
+    async def repository_client(
+        self,
+        *,
+        installation_id: int,
+        repository: RepositorySnapshot,
+    ) -> FakeRepositoryEvidence:
+        del installation_id, repository
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+
+
+class CountBarrierSession:
+    """Make the legacy read-before-write capacity race deterministic in a real database."""
+
+    def __init__(self, database, barrier: asyncio.Barrier) -> None:
+        self._database = database
+        self._barrier = barrier
+
+    async def execute(self, statement, *args, **kwargs):
+        rendered_statement = str(statement)
+        if rendered_statement.startswith("DELETE FROM github_oauth_transactions"):
+            # The test database starts empty. Skipping this no-op mirrors PostgreSQL's
+            # non-blocking read path instead of letting SQLite take an eager writer lock.
+            return None
+        result = await self._database.execute(statement, *args, **kwargs)
+        if "count(" in rendered_statement and "github_oauth_transactions" in rendered_statement:
+            # Release SQLite's shared read lock before both transactions continue to
+            # the independent insert/commit phase. PostgreSQL's READ COMMITTED mode
+            # permits this interleaving without the test harness.
+            await self._database.rollback()
+            await self._barrier.wait()
+        return result
+
+    def __getattr__(self, name: str):
+        return getattr(self._database, name)
 
 
 def github_authorization_params(response) -> dict[str, str]:
@@ -217,14 +277,15 @@ async def test_github_callback_creates_an_opaque_app_session_and_persists_only_t
         user = (await database.execute(select(User))).scalar_one()
         installation = (await database.execute(select(GitHubRepository))).scalar_one()
         session = (await database.execute(select(Session))).scalar_one()
-        transaction = (await database.execute(select(GitHubOAuthTransaction))).scalar_one()
+        transaction_count = (
+            await database.execute(select(func.count(GitHubOAuthTransaction.id)))
+        ).scalar_one()
 
     assert user.github_user_id == "99"
     assert not hasattr(user, "github_login")
     assert installation.github_repository_id == 42
     assert session.token_hash != session_token
-    assert transaction.user_id is None
-    assert transaction.consumed_at is not None
+    assert transaction_count == 0
     assert (await client.get("/api/me")).json()["user"] == {
         "id": str(user.id),
         "githubConnected": True,
@@ -335,16 +396,19 @@ async def test_disconnect_cancels_a_pending_github_link_before_any_provider_requ
     _configured_client, app = configured_github_client
     client = await other_authenticated_client(app)
     try:
+        app.state.settings.github_oauth_max_pending_transactions = 1
         fake = FakeGitHub()
         app.state.github_client_factory = lambda _settings: fake
         state = await start_github_authorization(client)
 
         assert (await client.delete("/api/github/connection")).status_code == 204
+        replacement = await client.get("/api/auth/github/login")
         callback = await client.get(
             "/api/auth/github/callback",
             params={"state": state, "code": "opaque-code"},
         )
 
+        assert replacement.status_code == 307
         assert callback.status_code == 307
         assert callback.headers["location"] == "http://testserver/"
         assert fake.authorization_calls == []
@@ -382,6 +446,155 @@ async def test_github_login_removes_expired_transactions_and_bounds_open_transac
     finally:
         await other.aclose()
     assert saturated.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_parallel_github_logins_are_database_bounded_and_busy_starts_never_return_500(
+    configured_github_client,
+) -> None:
+    _client, app = configured_github_client
+    app.state.settings.github_oauth_max_pending_transactions = 2
+    clients = [
+        AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://testserver",
+            follow_redirects=False,
+        )
+        for _ in range(8)
+    ]
+    start = asyncio.Event()
+
+    async def begin(client: AsyncClient):
+        await start.wait()
+        return await client.get("/api/auth/github/login")
+
+    tasks = [asyncio.create_task(begin(client)) for client in clients]
+    await asyncio.sleep(0)
+    start.set()
+    try:
+        responses = await asyncio.gather(*tasks)
+    finally:
+        await asyncio.gather(*(client.aclose() for client in clients))
+
+    status_codes = [response.status_code for response in responses]
+    assert status_codes.count(307) == 2
+    assert status_codes.count(429) == 6
+    assert set(status_codes) <= {307, 429}
+    async with app.state.session_factory() as database:
+        transaction_count = (
+            await database.execute(select(func.count(GitHubOAuthTransaction.id)))
+        ).scalar_one()
+    assert transaction_count == 2
+
+
+@pytest.mark.asyncio
+async def test_oauth_capacity_claim_remains_atomic_when_legacy_count_reads_interleave(
+    configured_github_client,
+) -> None:
+    _client, app = configured_github_client
+    barrier = asyncio.Barrier(2)
+    async with app.state.session_factory() as first_database, app.state.session_factory() as second_database:
+        first = CountBarrierSession(first_database, barrier)
+        second = CountBarrierSession(second_database, barrier)
+
+        async def begin(database, state: str) -> str:
+            try:
+                await create_oauth_transaction(
+                    database,
+                    state=state,
+                    max_age_seconds=60,
+                    user_id=None,
+                    previous_state=None,
+                    max_pending_transactions=1,
+                )
+            except OAuthTransactionLimitError:
+                return "full"
+            return "created"
+
+        results = await asyncio.gather(
+            begin(first, "first-state"),
+            begin(second, "second-state"),
+            return_exceptions=True,
+        )
+
+    assert results.count("created") == 1
+    assert results.count("full") == 1
+    assert not any(isinstance(result, Exception) for result in results)
+    async with app.state.session_factory() as database:
+        transaction_count = (
+            await database.execute(select(func.count(GitHubOAuthTransaction.id)))
+        ).scalar_one()
+    assert transaction_count == 1
+
+
+@pytest.mark.asyncio
+async def test_github_callback_uses_the_hard_operation_deadline_and_cleans_its_transaction(
+    configured_github_client,
+    monkeypatch,
+) -> None:
+    client, app = configured_github_client
+    blocking = BlockingAuthorizationGitHub()
+    app.state.github_client_factory = lambda _settings: blocking
+    app.state.settings.github_callback_timeout_seconds = 60
+    monkeypatch.setattr(
+        github_client_module,
+        "MAX_GITHUB_OPERATION_TIMEOUT_SECONDS",
+        0.01,
+        raising=False,
+    )
+    state = await start_github_authorization(client)
+
+    response = await asyncio.wait_for(
+        client.get(
+            "/api/auth/github/callback",
+            params={"state": state, "code": "opaque-code"},
+        ),
+        timeout=0.2,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "http://testserver/"
+    assert "opaque-code" not in response.text
+    await asyncio.wait_for(blocking.cancelled.wait(), timeout=0.1)
+    assert client.cookies.get("refocus_github_oauth_state") is None
+    assert client.cookies.get("refocus_github_pkce_verifier") is None
+    async with app.state.session_factory() as database:
+        transaction_count = (
+            await database.execute(select(func.count(GitHubOAuthTransaction.id)))
+        ).scalar_one()
+    assert transaction_count == 0
+
+
+@pytest.mark.asyncio
+async def test_mission_verification_uses_the_hard_operation_deadline(
+    configured_github_client,
+    monkeypatch,
+) -> None:
+    client, app = configured_github_client
+    await connect_github(client, app, FakeGitHub())
+    assert (await client.put("/api/github/repositories/42")).status_code == 200
+    blocking = BlockingVerificationGitHub()
+    app.state.github_client_factory = lambda _settings: blocking
+    app.state.settings.github_verification_timeout_seconds = 60
+    monkeypatch.setattr(
+        github_client_module,
+        "MAX_GITHUB_OPERATION_TIMEOUT_SECONDS",
+        0.01,
+        raising=False,
+    )
+
+    response = await asyncio.wait_for(
+        client.post("/api/missions/api-service-v1/verify", json={}),
+        timeout=0.2,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "needs_attention",
+        "evidence": [],
+        "reason": "GitHub evidence could not be checked right now.",
+    }
+    await asyncio.wait_for(blocking.cancelled.wait(), timeout=0.1)
 
 
 @pytest.mark.asyncio

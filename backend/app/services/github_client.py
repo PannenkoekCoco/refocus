@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import quote
 
 import httpx
@@ -17,6 +18,7 @@ GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_API_URL = "https://api.github.com"
 GITHUB_API_VERSION = "2026-03-10"
 GITHUB_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
+MAX_GITHUB_OPERATION_TIMEOUT_SECONDS = 15.0
 READ_ONLY_GITHUB_PERMISSIONS = {
     "metadata": "read",
     "contents": "read",
@@ -59,6 +61,30 @@ class GitHubProviderUnavailableError(GitHubClientError):
 
 class GitHubRequestTimeoutError(GitHubClientError):
     message = "GitHub did not respond in time."
+
+
+class GitHubOperationTimeoutError(GitHubRequestTimeoutError):
+    """A complete provider operation exceeded Refocus's hard deadline."""
+
+
+OperationResult = TypeVar("OperationResult")
+
+
+def github_operation_timeout_seconds(configured_timeout_seconds: float | int) -> float:
+    """Keep an operator's lower deadline, but never extend GitHub work past 15 seconds."""
+    return min(float(configured_timeout_seconds), MAX_GITHUB_OPERATION_TIMEOUT_SECONDS)
+
+
+async def run_with_github_operation_deadline(
+    operation: Awaitable[OperationResult],
+    *,
+    timeout_seconds: float | int,
+) -> OperationResult:
+    try:
+        async with asyncio.timeout(github_operation_timeout_seconds(timeout_seconds)):
+            return await operation
+    except TimeoutError as error:
+        raise GitHubOperationTimeoutError() from error
 
 
 @dataclass(frozen=True)

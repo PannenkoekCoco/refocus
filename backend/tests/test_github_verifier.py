@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 import json
 from urllib.parse import parse_qs
@@ -9,6 +10,7 @@ import jwt
 import pytest
 
 from app.config import Settings
+import app.services.github_client as github_client_module
 from app.services.github_client import (
     GitHubClient,
     GitHubForbiddenError,
@@ -164,6 +166,37 @@ class RecordingHttpClientFactory:
     def __call__(self, **kwargs):
         self.kwargs = kwargs
         return httpx.AsyncClient(transport=httpx.MockTransport(self.handler), **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_operation_deadline_caps_configured_values_and_cancels_the_awaited_operation(
+    monkeypatch,
+) -> None:
+    cancelled = asyncio.Event()
+
+    async def never_finishes() -> None:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    assert getattr(github_client_module, "github_operation_timeout_seconds", None) is not None
+    assert github_client_module.github_operation_timeout_seconds(60) == 15
+    monkeypatch.setattr(
+        github_client_module,
+        "MAX_GITHUB_OPERATION_TIMEOUT_SECONDS",
+        0.01,
+        raising=False,
+    )
+
+    with pytest.raises(github_client_module.GitHubOperationTimeoutError):
+        await github_client_module.run_with_github_operation_deadline(
+            never_finishes(),
+            timeout_seconds=60,
+        )
+
+    assert cancelled.is_set()
 
 
 def test_app_jwt_uses_rs256_and_a_short_lived_app_identity() -> None:
