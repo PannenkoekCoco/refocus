@@ -8,13 +8,34 @@ import {
 test("a pinned topic wins over a job-relevant prerequisite", () => {
   const next = selectRecommendedTopic({
     pinnedTopicId: "retrieval-augmented-generation",
-    topics: [{ id: "apis" }, { id: "retrieval-augmented-generation" }],
+    topics: [
+      { id: "apis", prerequisites: [] },
+      { id: "retrieval-augmented-generation", prerequisites: ["apis"] },
+    ],
     jobScores: { apis: 100, "retrieval-augmented-generation": 90 },
     mastery: {},
   });
 
   assert.equal(next.id, "retrieval-augmented-generation");
   assert.equal(next.reason, "You pinned this topic.");
+  assert.deepEqual(next.advisoryPrerequisites, ["apis"]);
+});
+
+test("development scores outrank job scores while preserving authored ties", () => {
+  const topics = [
+    { id: "python", prerequisites: [] },
+    { id: "apis", prerequisites: ["python"] },
+    { id: "sql", prerequisites: ["python"] },
+  ];
+  const next = selectRecommendedTopic({
+    topics,
+    developmentScores: { apis: 0.11 },
+    jobScores: { sql: 1 },
+    mastery: { python: 0, apis: 1, sql: 1 },
+  });
+
+  assert.equal(next.id, "apis");
+  assert.deepEqual(next.advisoryPrerequisites, ["python"]);
 });
 
 test("a route keeps starter topics selectable and prerequisites advisory", () => {

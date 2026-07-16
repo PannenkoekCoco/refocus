@@ -1,5 +1,5 @@
 import { createStatusMessage } from "./components/status-message.js";
-import { createProgressClient } from "./api/client.js";
+import { createFocusLensClient, createProgressClient } from "./api/client.js";
 import { loadLesson, loadTopics } from "./content/loader.js";
 import { createTtsProvider } from "./services/tts.js";
 import {
@@ -78,6 +78,9 @@ const progressClient = createProgressClient({
   queuePendingProgress,
   onPending: statusMessage.announce,
 });
+const focusLensClient = createFocusLensClient({
+  fetchImpl: window.fetch.bind(window),
+});
 
 function dispatchLearningState(action, savedMessage) {
   store.dispatch(action);
@@ -87,6 +90,7 @@ function dispatchLearningState(action, savedMessage) {
 
 let topics = [];
 let missions = [];
+let focusLenses = [];
 let currentView = { name: "loading" };
 
 function getRecommendation() {
@@ -94,6 +98,8 @@ function getRecommendation() {
   return selectRecommendedTopic({
     pinnedTopicId: state.pinnedTopicId,
     topics,
+    developmentScores: state.developmentScores,
+    jobScores: state.jobScores,
     mastery: masteryFromAttempts(state.quizAttempts),
   });
 }
@@ -143,6 +149,13 @@ function render({ moveFocus = false, focusTarget } = {}) {
       container: app,
       recommendation,
       onOpenTopic: openTopic,
+      topics,
+      lenses: focusLenses,
+      tts,
+      onNarrationError: statusMessage.announce,
+      onPreview: (payload) => focusLensClient.preview(payload),
+      onApply: applyFocusLens,
+      onStatus: statusMessage.announce,
     });
     renderRouteMap({
       container: app,
@@ -280,6 +293,70 @@ function saveMission(mission, missionState) {
   );
 }
 
+function isFocusLens(value) {
+  return value
+    && typeof value === "object"
+    && ["job", "development"].includes(value.kind)
+    && typeof value.originalText === "string"
+    && Array.isArray(value.skills)
+    && typeof value.isActive === "boolean";
+}
+
+function replaceInMemoryFocusLens(nextLens) {
+  const localId = `local-${nextLens.kind}`;
+  const nextId = typeof nextLens.id === "string" ? nextLens.id : localId;
+  let replaced = false;
+  focusLenses = focusLenses.flatMap((lens) => {
+    if (lens.id === nextId || lens.id === localId) {
+      replaced = true;
+      return [{ ...nextLens, id: nextId }];
+    }
+    if (nextLens.isActive && lens.kind === nextLens.kind && lens.isActive) {
+      return [{ ...lens, isActive: false }];
+    }
+    return [lens];
+  });
+  if (!replaced) focusLenses.push({ ...nextLens, id: nextId });
+}
+
+async function applyFocusLens(lens) {
+  replaceInMemoryFocusLens(lens);
+  store.dispatch({ type: "applyFocusLens", kind: lens.kind, skills: lens.skills });
+  const persistedLocally = latestPersistenceSucceeded;
+  render();
+
+  const savedLens = await focusLensClient.save(lens);
+  if (isFocusLens(savedLens) && typeof savedLens.id === "string") {
+    replaceInMemoryFocusLens(savedLens);
+    statusMessage.announce(
+      persistedLocally
+        ? "Applied to your route and saved to your account."
+        : "Applied to your route and saved to your account. Local route progress is available for this session only.",
+    );
+    render();
+    return;
+  }
+
+  statusMessage.announce(
+    persistedLocally
+      ? "Applied to your route. Sign in to save this focus lens."
+      : "Applied to your route for this session only. Sign in to save this focus lens.",
+  );
+}
+
+async function loadSavedFocusLenses() {
+  const savedLenses = await focusLensClient.list();
+  if (!Array.isArray(savedLenses)) return;
+  focusLenses = savedLenses.filter(isFocusLens);
+  for (const kind of ["job", "development"]) {
+    const activeLens = focusLenses.find((lens) => lens.kind === kind && lens.isActive);
+    if (activeLens) {
+      store.dispatch({ type: "applyFocusLens", kind, skills: activeLens.skills });
+    }
+  }
+  if (currentView.name === "route") render();
+}
+
 async function start() {
   render();
   try {
@@ -287,6 +364,7 @@ async function start() {
     [topics, missions] = await Promise.all([loadTopics(fetchImpl), loadMissions(fetchImpl)]);
     currentView = { name: "route" };
     render();
+    void loadSavedFocusLenses();
   } catch {
     currentView = { name: "error" };
     statusMessage.announce("Refocus could not load the local curriculum. Check that its content files are available.");

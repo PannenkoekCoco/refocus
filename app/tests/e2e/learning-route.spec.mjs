@@ -203,3 +203,70 @@ test("the initial route does not move focus before learner interaction", async (
 
   await expect(page.getByRole("heading", { name: "Your flexible route" })).not.toBeFocused();
 });
+
+test("a learner can preview, edit, and locally apply a job lens when saving is unavailable", async ({ page }) => {
+  await page.route("**/api/focus-lenses**", async (route) => {
+    const method = route.request().method();
+    const url = route.request().url();
+    if (method === "POST" && url.endsWith("/preview")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          skills: [
+            { topicId: "python-beyond-scripts", weight: 0.3 },
+            { topicId: "apis", weight: 0.6 },
+          ],
+        }),
+      });
+      return;
+    }
+    await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({}) });
+  });
+
+  await page.goto("./");
+  const jobDescription = page.getByRole("textbox", { name: "Job description" });
+  const rawText = "<img src=x onerror=alert(1)> Build an API";
+  await jobDescription.fill(rawText);
+  await page.getByRole("button", { name: "Preview skills" }).click();
+  await expect(page.getByRole("slider", { name: "APIs weight" })).toHaveValue("0.6");
+  await page.getByRole("slider", { name: "APIs weight" }).press("End");
+  await page.getByRole("button", { name: "Apply to route" }).click();
+
+  await expect(page.locator(".recommendation-card")).toContainText("APIs");
+  await expect(page.getByText("Applied to your route. Sign in to save this focus lens.")).toBeVisible();
+  await expect(page.locator("img")).toHaveCount(0);
+  const cached = await page.evaluate(() => localStorage.getItem("engineeringLearningRoute.v1"));
+  expect(cached).not.toContain(rawText);
+});
+
+test("owned saved lenses reload into editable controls without rendering learner text as markup", async ({ page }) => {
+  const rawText = "<strong>Private role text</strong>";
+  await page.route("**/api/focus-lenses", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({}) });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        lenses: [{
+          id: "00000000-0000-0000-0000-000000000001",
+          kind: "job",
+          originalText: rawText,
+          skills: [{ topicId: "apis", weight: 1 }],
+          isActive: true,
+          createdAt: "2026-07-16T00:00:00Z",
+          updatedAt: "2026-07-16T00:00:00Z",
+        }],
+      }),
+    });
+  });
+
+  await page.goto("./");
+
+  await expect(page.getByRole("textbox", { name: "Job description" })).toHaveValue(rawText);
+  await expect(page.locator(".recommendation-card")).toContainText("APIs");
+  await expect(page.locator("strong")).toHaveCount(0);
+});

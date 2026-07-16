@@ -125,3 +125,27 @@ test("the store records learning progress and persists only its route key", () =
   assert.equal(writes[0][0], LEARNING_ROUTE_STORAGE_KEY);
   assert.deepEqual(JSON.parse(writes[0][1]), store.getState());
 });
+
+test("focus-lens weights can shape the local route without persisting raw learner text", () => {
+  const storage = {
+    written: null,
+    getItem: () => null,
+    setItem(_key, value) {
+      this.written = value;
+    },
+  };
+  const store = createStore();
+
+  store.dispatch({
+    type: "applyFocusLens",
+    kind: "job",
+    skills: [{ topicId: "apis", weight: 0.8 }],
+    originalText: "Build a private API for the portfolio.",
+  });
+  persistLearningState(storage, store.getState());
+
+  assert.deepEqual(store.getState().jobScores, { apis: 0.8 });
+  assert.equal(JSON.parse(storage.written).jobScores.apis, 0.8);
+  assert.doesNotMatch(storage.written, /Build a private API/);
+  assert.equal("originalText" in JSON.parse(storage.written), false);
+});

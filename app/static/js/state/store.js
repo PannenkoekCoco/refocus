@@ -20,6 +20,27 @@ function isNonNegativeInteger(value) {
   return Number.isInteger(value) && value >= 0;
 }
 
+function normaliseFocusScores(value) {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(([topicId, weight]) => (
+      typeof topicId === "string"
+      && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(topicId)
+      && typeof weight === "number"
+      && Number.isFinite(weight)
+      && weight >= 0
+      && weight <= 1
+    )),
+  );
+}
+
+function normaliseFocusSkills(skills) {
+  if (!Array.isArray(skills)) return {};
+  return normaliseFocusScores(Object.fromEntries(skills.flatMap((skill) => (
+    isRecord(skill) ? [[skill.topicId, skill.weight]] : []
+  ))));
+}
+
 function normaliseQuizAttempts(value) {
   if (!isRecord(value)) return {};
   return Object.fromEntries(
@@ -93,12 +114,16 @@ export function normaliseLearningState(value) {
   if (!isRecord(value)) return { ...EMPTY_LEARNING_STATE };
 
   const pendingProgress = normalisePendingProgress(value.pendingProgress);
+  const jobScores = normaliseFocusScores(value.jobScores);
+  const developmentScores = normaliseFocusScores(value.developmentScores);
 
   return {
     pinnedTopicId: typeof value.pinnedTopicId === "string" ? value.pinnedTopicId : null,
     exploredLessonIds: uniqueStringIds(value.exploredLessonIds),
     quizAttempts: normaliseQuizAttempts(value.quizAttempts),
     missionStates: normaliseMissionStates(value.missionStates),
+    ...(Object.keys(jobScores).length > 0 ? { jobScores } : {}),
+    ...(Object.keys(developmentScores).length > 0 ? { developmentScores } : {}),
     ...(pendingProgress.length > 0 ? { pendingProgress } : {}),
   };
 }
@@ -150,6 +175,15 @@ function reduce(state, action) {
       };
     case "queuePendingProgress":
       return queuePendingProgress(state, action.record);
+    case "applyFocusLens": {
+      const scoreKey = action.kind === "job"
+        ? "jobScores"
+        : action.kind === "development"
+          ? "developmentScores"
+          : null;
+      if (scoreKey === null) return state;
+      return { ...state, [scoreKey]: normaliseFocusSkills(action.skills) };
+    }
     case "saveMission":
       return {
         ...state,

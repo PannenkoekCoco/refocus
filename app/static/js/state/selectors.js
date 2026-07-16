@@ -7,18 +7,31 @@ export function selectRecommendedTopic({
 }) {
   const byId = new Map(topics.map((topic) => [topic.id, topic]));
   if (pinnedTopicId && byId.has(pinnedTopicId)) {
-    return { ...byId.get(pinnedTopicId), reason: "You pinned this topic." };
+    const topic = byId.get(pinnedTopicId);
+    return {
+      ...topic,
+      reason: "You pinned this topic.",
+      advisoryPrerequisites: Array.isArray(topic.prerequisites) ? [...topic.prerequisites] : [],
+    };
   }
 
-  return topics
-    .map((topic) => ({
-      ...topic,
-      score: (developmentScores[topic.id] ?? 0) * 1000
-        + (jobScores[topic.id] ?? 0) * 100
-        + (1 - (mastery[topic.id] ?? 0)) * 10,
-      reason: "Recommended from your goals and current mastery.",
-    }))
-    .sort((left, right) => right.score - left.score)[0];
+  let recommendation = null;
+  let highestScore = -Infinity;
+  for (const topic of topics) {
+    const score = (developmentScores[topic.id] ?? 0) * 1000
+      + (jobScores[topic.id] ?? 0) * 100
+      + (1 - (mastery[topic.id] ?? 0)) * 10;
+    if (score > highestScore) {
+      highestScore = score;
+      recommendation = {
+        ...topic,
+        score,
+        reason: "Recommended from your goals and current mastery.",
+        advisoryPrerequisites: Array.isArray(topic.prerequisites) ? [...topic.prerequisites] : [],
+      };
+    }
+  }
+  return recommendation;
 }
 
 function advisoryPrerequisites(topic, topicsById) {

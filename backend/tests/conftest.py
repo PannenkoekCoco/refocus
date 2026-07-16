@@ -62,6 +62,19 @@ def _create_schema(database_path: Path) -> None:
                 created_at DATETIME NOT NULL,
                 CONSTRAINT uq_quiz_attempt_user_client_attempt UNIQUE (user_id, client_attempt_id)
             );
+            CREATE TABLE focus_lenses (
+                id CHAR(32) PRIMARY KEY,
+                user_id CHAR(32) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                kind VARCHAR(16) NOT NULL,
+                original_text TEXT NOT NULL,
+                skill_weights_json JSON NOT NULL,
+                is_active BOOLEAN NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            CREATE UNIQUE INDEX uq_focus_lenses_active_user_kind
+                ON focus_lenses (user_id, kind)
+                WHERE is_active = 1;
             """
         )
         connection.commit()

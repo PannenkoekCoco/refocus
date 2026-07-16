@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   PENDING_PROGRESS_MESSAGE,
+  createFocusLensClient,
   createProgressClient,
 } from "../static/js/api/client.js";
 import {
@@ -150,4 +151,38 @@ test("a failed quiz save records local pending progress before refreshing recomm
   assert.equal(refreshCalls, 1);
   assert.equal(result.attempt, null);
   assert.deepEqual(result.recommendation, { topicId: "sql" });
+});
+
+test("focus-lens preview, save, and reload use same-origin requests and report unavailable saves honestly", async () => {
+  const requests = [];
+  const client = createFocusLensClient({
+    fetchImpl: async (url, options = {}) => {
+      requests.push([url, options]);
+      if (url === "/api/focus-lenses" && options.method === "GET") {
+        return { ok: true, json: async () => ({ lenses: [] }) };
+      }
+      if (url === "/api/focus-lenses/preview") {
+        return { ok: true, json: async () => ({ skills: [{ topicId: "apis", weight: 0.7 }] }) };
+      }
+      return { ok: false, json: async () => ({}) };
+    },
+  });
+
+  const preview = await client.preview({ kind: "job", originalText: "Build an API" });
+  const saved = await client.save({
+    kind: "job",
+    originalText: "Build an API",
+    skills: [{ topicId: "apis", weight: 0.7 }],
+    isActive: true,
+  });
+  const lenses = await client.list();
+
+  assert.deepEqual(preview, { skills: [{ topicId: "apis", weight: 0.7 }] });
+  assert.equal(saved, null);
+  assert.deepEqual(lenses, []);
+  assert.equal(requests[0][0], "/api/focus-lenses/preview");
+  assert.equal(requests[0][1].credentials, "same-origin");
+  assert.equal(requests[1][0], "/api/focus-lenses");
+  assert.equal(requests[1][1].method, "POST");
+  assert.equal(requests[2][1].method, "GET");
 });
