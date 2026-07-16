@@ -2,11 +2,15 @@ import json
 import sys
 from pathlib import Path
 
+from httpx import ASGITransport, AsyncClient
+import pytest
+
 
 BACKEND_ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.content_repository import ContentRepository
+from app.main import create_app
 
 
 CONTENT_ROOT = BACKEND_ROOT.parent / "content"
@@ -97,3 +101,76 @@ def test_api_service_mission_contract_is_readable_without_execution() -> None:
             },
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_content_api_returns_typed_route_topics() -> None:
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://test") as client:
+        response = await client.get("/api/content/topics")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert {topic["id"] for topic in payload["topics"]} == ROUTE_TOPIC_IDS
+    topic = next(candidate for candidate in payload["topics"] if candidate["id"] == "apis")
+    assert set(topic) == {
+        "id",
+        "title",
+        "category",
+        "contentStatus",
+        "prerequisites",
+        "summary",
+        "speechText",
+    }
+    assert isinstance(topic["prerequisites"], list)
+    assert all(isinstance(prerequisite, str) for prerequisite in topic["prerequisites"])
+
+
+@pytest.mark.asyncio
+async def test_content_api_returns_a_typed_full_lesson() -> None:
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://test") as client:
+        response = await client.get("/api/content/lessons/apis")
+
+    assert response.status_code == 200
+    lesson = response.json()
+    assert set(lesson) == {"topicId", "title", "speechText", "sections", "questions", "starterAction"}
+    assert lesson["topicId"] == "apis"
+    assert set(lesson["sections"][0]) == {"id", "title", "body", "speechText"}
+    assert set(lesson["questions"][0]) == {
+        "id",
+        "prompt",
+        "speechText",
+        "options",
+        "correctOption",
+        "explanation",
+        "explanationSpeechText",
+    }
+    assert set(lesson["questions"][0]["options"][0]) == {"id", "text", "speechText"}
+    assert set(lesson["starterAction"]) == {"id", "title", "description", "speechText"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("topic_id", ["missing-topic", "%2E%2E%2Ftopics"])
+async def test_content_api_returns_not_found_for_unknown_or_invalid_lessons(topic_id: str) -> None:
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://test") as client:
+        response = await client.get(f"/api/content/lessons/{topic_id}")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_static_root_serves_the_learning_shell() -> None:
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://test") as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "<title>Refocus</title>" in response.text
+
+
+@pytest.mark.asyncio
+async def test_static_content_mount_serves_the_versioned_mission_contract() -> None:
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://test") as client:
+        response = await client.get("/content/missions/foundation-missions.json")
+
+    assert response.status_code == 200
+    assert response.json()["missions"][0]["id"] == "api-service-v1"

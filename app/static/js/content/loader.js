@@ -38,14 +38,26 @@ async function readContent(path, fetchImpl) {
   return response.json();
 }
 
-export async function loadTopics(fetchImpl) {
-  const payload = await readContent("../../../../content/topics.json", fetchImpl);
+async function readApiContent(path, fetchImpl) {
+  try {
+    const response = await fetchImpl(path);
+    return response.ok ? response.json() : null;
+  } catch {
+    // Local Supertonic-only mode uses versioned static content below.
+    return null;
+  }
+}
+
+export async function loadTopics(fetchImpl = fetch) {
+  const payload = await readApiContent("/api/content/topics", fetchImpl)
+    ?? await readContent("../../../../content/topics.json", fetchImpl);
   return validateTopics(payload.topics);
 }
 
-export async function loadLesson(topicId, fetchImpl) {
+export async function loadLesson(topicId, fetchImpl = fetch) {
   if (!LESSON_TOPIC_IDS.has(topicId)) {
     throw new Error("Invalid lesson topic: " + topicId);
   }
-  return readContent(`../../../../content/lessons/${topicId}.json`, fetchImpl);
+  return await readApiContent(`/api/content/lessons/${topicId}`, fetchImpl)
+    ?? readContent(`../../../../content/lessons/${topicId}.json`, fetchImpl);
 }
