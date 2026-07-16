@@ -1,0 +1,133 @@
+.learning-screen,
+.quiz-screen,
+.mission-screen {
+  display: grid;
+  gap: var(--space-5);
+  max-width: 52rem;
+}
+
+.back-link-row {
+  display: flex;
+}
+
+.learning-card,
+.quiz-card,
+.mission-card,
+.lesson-section,
+.quiz-feedback {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.learning-card,
+.quiz-card,
+.mission-card {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.lesson-section {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.learning-card h2,
+.lesson-section h3,
+.quiz-card h2,
+.mission-card h2,
+.mission-card h3 {
+  margin: 0;
+}
+
+.learning-card p,
+.lesson-section p,
+.quiz-card p,
+.mission-card p {
+  margin: 0;
+}
+
+.narrator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.narrator button {
+  min-height: 2.75rem;
+}
+
+.lesson-sections,
+.quiz-options,
+.mission-options,
+.mission-checklist,
+.result-actions {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.quiz-options button {
+  min-height: 3rem;
+  text-align: left;
+}
+
+.quiz-feedback {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.quiz-feedback.correct {
+  border-color: var(--color-success);
+}
+
+.quiz-feedback.incorrect {
+  border-color: var(--color-warning);
+}
+
+.quiz-feedback p {
+  font-weight: 700;
+}
+
+.mission-options {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.reflection-field {
+  display: grid;
+  gap: var(--space-2);
+  font-weight: 700;
+}
+
+.reflection-field textarea {
+  min-height: 7rem;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+}
+
+.mission-checklist {
+  padding-left: var(--space-5);
+  margin: 0;
+}
+
+.mission-note {
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+}
+
+@media (min-width: 48rem) {
+  .learning-card,
+  .quiz-card,
+  .mission-card {
+    padding: var(--space-6);
+  }
+
+  .result-actions {
+    grid-template-columns: repeat(2, max-content);
+  }
+}
