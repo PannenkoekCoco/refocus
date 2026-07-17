@@ -1,11 +1,58 @@
+import { normalisePendingProgress, pendingProgressKey } from "../state/store.js";
+
 export const PENDING_PROGRESS_MESSAGE = "Saved locally; sign in or retry to sync.";
 export const LOCAL_PROGRESS_UNAVAILABLE_MESSAGE = "Progress could not be saved locally. It is available for this session only.";
 
 const FOCUS_LENS_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MISSION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function isPositiveSafeInteger(value) {
   return Number.isSafeInteger(value) && value > 0;
+}
+
+function isNonNegativeInteger(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
+function isProgressSnapshotTopic(value) {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && MISSION_ID_PATTERN.test(value.topicId)
+    && ["explored", "completed"].includes(value.status)
+    && typeof value.updatedAt === "string";
+}
+
+function isProgressSnapshotAttempt(value) {
+  return isRecord(value)
+    && typeof value.lessonId === "string"
+    && isNonNegativeInteger(value.correct)
+    && isNonNegativeInteger(value.total)
+    && value.correct <= value.total;
+}
+
+function isProgressSnapshotMission(value) {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && MISSION_ID_PATTERN.test(value.missionId)
+    && ["guided", "byop"].includes(value.approach)
+    && typeof value.reflection === "string"
+    && value.reflection.length <= 500
+    && value.status === "self_reviewed"
+    && typeof value.updatedAt === "string";
+}
+
+function isProgressSnapshot(value) {
+  return isRecord(value)
+    && Array.isArray(value.topics)
+    && Array.isArray(value.quizAttempts)
+    && Array.isArray(value.missions)
+    && value.topics.every(isProgressSnapshotTopic)
+    && value.quizAttempts.every(isProgressSnapshotAttempt)
+    && value.missions.every(isProgressSnapshotMission);
 }
 
 function isGitHubRepository(value) {
@@ -61,53 +108,118 @@ function announcePendingPersistence(onPending, persisted) {
   onPending(persisted ? PENDING_PROGRESS_MESSAGE : LOCAL_PROGRESS_UNAVAILABLE_MESSAGE);
 }
 
+function progressRequest(record) {
+  if (record.kind === "quizAttempt") {
+    return {
+      url: "/api/progress/quiz-attempts",
+      options: {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record.payload),
+      },
+    };
+  }
+  if (record.kind === "topicProgress") {
+    return {
+      url: `/api/progress/topic/${encodeURIComponent(record.payload.topicId)}`,
+      options: {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: record.payload.status }),
+      },
+    };
+  }
+  if (record.kind === "missionProgress") {
+    const { missionId, ...missionState } = record.payload;
+    return {
+      url: `/api/progress/missions/${encodeURIComponent(missionId)}`,
+      options: {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(missionState),
+      },
+    };
+  }
+  throw new TypeError("Unsupported progress record");
+}
+
 export function createProgressClient({
   fetchImpl = globalThis.fetch?.bind(globalThis),
   queuePendingProgress = () => false,
   onPending = () => {},
 } = {}) {
+  async function sendProgressRecord(record) {
+    const [normalisedRecord] = normalisePendingProgress([record]);
+    if (!normalisedRecord) throw new TypeError("Invalid progress record");
+    if (typeof fetchImpl !== "function") throw new TypeError("Fetch is unavailable");
+    const { url, options } = progressRequest(normalisedRecord);
+    return fetchImpl(url, options);
+  }
+
+  async function saveProgressRecord(record) {
+    const response = await sendProgressRecord(record);
+    if (!response.ok) throw new Error("Progress sync failed");
+    return response.json();
+  }
+
+  async function saveOrQueue(record) {
+    try {
+      return await saveProgressRecord(record);
+    } catch {
+      announcePendingPersistence(onPending, queuePendingRecord(queuePendingProgress, record));
+      return null;
+    }
+  }
+
   async function saveQuizAttempt(attempt) {
     const payload = {
       ...attempt,
       ...(attempt.attemptId ? {} : { attemptId: newAttemptId() }),
     };
+    return saveOrQueue({ kind: "quizAttempt", payload });
+  }
+
+  async function saveTopicProgress(topicId, status) {
+    return saveOrQueue({ kind: "topicProgress", payload: { topicId, status } });
+  }
+
+  async function saveMissionProgress(missionId, missionState) {
+    return saveOrQueue({
+      kind: "missionProgress",
+      payload: { ...missionState, missionId },
+    });
+  }
+
+  async function loadSnapshot() {
     try {
       if (typeof fetchImpl !== "function") throw new TypeError("Fetch is unavailable");
-      const response = await fetchImpl("/api/progress/quiz-attempts", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error("Progress sync failed");
-      return await response.json();
+      const response = await fetchImpl("/api/progress", { credentials: "same-origin" });
+      if (!response.ok) return null;
+      const snapshot = await response.json();
+      return isProgressSnapshot(snapshot) ? snapshot : null;
     } catch {
-      announcePendingPersistence(
-        onPending,
-        queuePendingRecord(queuePendingProgress, { kind: "quizAttempt", payload }),
-      );
       return null;
     }
   }
 
-  async function saveTopicProgress(topicId, status) {
-    try {
-      if (typeof fetchImpl !== "function") throw new TypeError("Fetch is unavailable");
-      const response = await fetchImpl(`/api/progress/topic/${encodeURIComponent(topicId)}`, {
-        method: "PUT",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!response.ok) throw new Error("Progress sync failed");
-      return await response.json();
-    } catch {
-      announcePendingPersistence(
-        onPending,
-        queuePendingRecord(queuePendingProgress, { kind: "topicProgress", payload: { topicId, status } }),
-      );
-      return null;
+  async function replayPendingProgress(records) {
+    const acknowledged = [];
+    const replayedKeys = new Set();
+    for (const record of normalisePendingProgress(records)) {
+      const recordKey = pendingProgressKey(record);
+      if (!recordKey || replayedKeys.has(recordKey)) continue;
+      replayedKeys.add(recordKey);
+      try {
+        const response = await sendProgressRecord(record);
+        if (response.ok) acknowledged.push(recordKey);
+      } catch {
+        // The store retains this exact record until a later replay acknowledges it.
+      }
     }
+    return acknowledged;
   }
 
   async function saveQuizAttemptAndRefresh(attempt, refreshRecommendation) {
@@ -118,7 +230,14 @@ export function createProgressClient({
     };
   }
 
-  return { saveQuizAttempt, saveTopicProgress, saveQuizAttemptAndRefresh };
+  return {
+    saveQuizAttempt,
+    saveTopicProgress,
+    saveMissionProgress,
+    loadSnapshot,
+    replayPendingProgress,
+    saveQuizAttemptAndRefresh,
+  };
 }
 
 export function createFocusLensClient({ fetchImpl = globalThis.fetch?.bind(globalThis) } = {}) {

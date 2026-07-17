@@ -34,10 +34,12 @@ export function renderDashboard({
   onOpenTopic,
   topics = [],
   lenses = [],
+  lensDraft,
   tts,
   onNarrationError,
   onPreview,
   onApply,
+  onLensDraftChange,
   onStatus,
 }) {
   const section = createElement("section");
@@ -85,10 +87,12 @@ export function renderDashboard({
     container: section,
     topics,
     lenses,
+    draft: lensDraft,
     tts,
     onNarrationError,
     onPreview,
     onApply,
+    onDraftChange: onLensDraftChange,
     onStatus,
   });
   container.append(section);

@@ -1,5 +1,6 @@
 import { createStatusMessage } from "./components/status-message.js";
 import {
+  PENDING_PROGRESS_MESSAGE,
   createFocusLensClient,
   createGitHubMissionClient,
   createProgressClient,
@@ -107,6 +108,57 @@ let missions = [];
 let focusLenses = [];
 let githubConnection = null;
 let currentView = { name: "loading" };
+let progressSyncPromise = null;
+let progressSyncReady = false;
+let focusLensDraft = null;
+
+function renderAfterProgressSync() {
+  if (currentView.name === "route") render();
+}
+
+function syncProgress() {
+  if (progressSyncPromise !== null) return progressSyncPromise;
+  const sync = (async () => {
+    let didChangeState = false;
+    const snapshot = await progressClient.loadSnapshot();
+    if (snapshot !== null) {
+      const previousState = store.getState();
+      const nextState = store.dispatch({ type: "hydrateServerProgress", snapshot });
+      didChangeState = nextState !== previousState;
+    }
+
+    const pendingRecords = [...(store.getState().pendingProgress ?? [])];
+    if (pendingRecords.length === 0) {
+      if (didChangeState) renderAfterProgressSync();
+      return;
+    }
+
+    let acknowledgedKeys = [];
+    try {
+      acknowledgedKeys = await progressClient.replayPendingProgress(pendingRecords);
+    } catch {
+      acknowledgedKeys = [];
+    }
+    if (acknowledgedKeys.length > 0) {
+      const previousState = store.getState();
+      const nextState = store.dispatch({ type: "ackPendingProgress", keys: acknowledgedKeys });
+      didChangeState = didChangeState || nextState !== previousState;
+    }
+    if ((store.getState().pendingProgress ?? []).length > 0) {
+      statusMessage.announce(PENDING_PROGRESS_MESSAGE);
+    }
+    if (didChangeState) renderAfterProgressSync();
+  })();
+  progressSyncPromise = sync.finally(() => {
+    progressSyncPromise = null;
+  });
+  return progressSyncPromise;
+}
+
+window.addEventListener("online", () => {
+  if (!progressSyncReady) return;
+  void syncProgress();
+});
 
 function getRecommendation() {
   const state = store.getState();
@@ -166,10 +218,14 @@ function render({ moveFocus = false, focusTarget } = {}) {
       onOpenTopic: openTopic,
       topics,
       lenses: focusLenses,
+      lensDraft: focusLensDraft,
       tts,
       onNarrationError: statusMessage.announce,
       onPreview: (payload) => focusLensClient.preview(payload),
       onApply: applyFocusLens,
+      onLensDraftChange: (nextDraft) => {
+        focusLensDraft = nextDraft;
+      },
       onStatus: statusMessage.announce,
     });
     renderRouteMap({
@@ -316,6 +372,7 @@ function saveMission(mission, missionState) {
     { type: "saveMission", missionId: mission.id, missionState },
     "Mission marked self-reviewed and saved locally. It has not been independently verified.",
   );
+  void progressClient.saveMissionProgress(mission.id, missionState);
 }
 
 async function loadGitHubConnection({ rerender = true } = {}) {
@@ -378,6 +435,12 @@ function replaceInMemoryFocusLens(nextLens) {
 }
 
 async function applyFocusLens(lens) {
+  if (focusLensDraft?.byKind && typeof focusLensDraft.byKind === "object") {
+    const remainingDrafts = Object.fromEntries(
+      Object.entries(focusLensDraft.byKind).filter(([kind]) => kind !== lens.kind),
+    );
+    focusLensDraft = { ...focusLensDraft, byKind: remainingDrafts };
+  }
   replaceInMemoryFocusLens(lens);
   store.dispatch({ type: "applyFocusLens", kind: lens.kind, skills: lens.skills });
   const persistedLocally = latestPersistenceSucceeded;
@@ -422,6 +485,8 @@ async function start() {
     [topics, missions] = await Promise.all([loadTopics(fetchImpl), loadMissions(fetchImpl)]);
     currentView = { name: "route" };
     render();
+    progressSyncReady = true;
+    void syncProgress();
     void loadSavedFocusLenses();
     void loadGitHubConnection({ rerender: false });
   } catch {

@@ -10,6 +10,7 @@ import {
   LEARNING_ROUTE_STORAGE_KEY,
   createStore,
   loadLearningState,
+  pendingProgressKey,
   persistLearningState,
 } from "../static/js/state/store.js";
 
@@ -41,6 +42,12 @@ const attempt = {
   attemptId: "5dd72f13-4d53-4a7d-9d07-c17b9e8ff89b",
   lessonId: "apis-1",
   answers: [{ questionId: "invalid-input", choiceIndex: 1, correct: true }],
+};
+
+const missionState = {
+  approach: "guided",
+  reflection: "Describe the API contract and the security boundary.",
+  status: "self_reviewed",
 };
 
 test("a failed progress save keeps a narrow pending record and exposes the sync message", async () => {
@@ -152,6 +159,101 @@ test("a failed quiz save records local pending progress before refreshing recomm
   assert.equal(refreshCalls, 1);
   assert.equal(result.attempt, null);
   assert.deepEqual(result.recommendation, { topicId: "sql" });
+});
+
+test("a progress snapshot falls back to null for an anonymous response", async () => {
+  const requests = [];
+  const client = createProgressClient({
+    fetchImpl: async (url, options) => {
+      requests.push([url, options]);
+      return { ok: false, status: 401, json: async () => ({}) };
+    },
+  });
+
+  assert.equal(await client.loadSnapshot(), null);
+  assert.deepEqual(requests, [["/api/progress", { credentials: "same-origin" }]]);
+});
+
+test("a pending replay acknowledges only the progress records whose writes succeed", async () => {
+  const topicRecord = {
+    kind: "topicProgress",
+    payload: { topicId: "apis", status: "explored" },
+  };
+  const missionRecord = {
+    kind: "missionProgress",
+    payload: { missionId: "api-service-v1", ...missionState },
+  };
+  const requests = [];
+  const client = createProgressClient({
+    fetchImpl: async (url, options) => {
+      requests.push([url, options]);
+      return {
+        ok: url.endsWith("/apis"),
+        status: url.endsWith("/apis") ? 200 : 503,
+        json: async () => ({}),
+      };
+    },
+  });
+
+  const acknowledged = await client.replayPendingProgress([topicRecord, missionRecord]);
+
+  assert.deepEqual(acknowledged, [pendingProgressKey(topicRecord)]);
+  assert.deepEqual(requests, [
+    ["/api/progress/topic/apis", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "explored" }),
+    }],
+    ["/api/progress/missions/api-service-v1", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(missionState),
+    }],
+  ]);
+});
+
+test("a failed mission self-review save is queued for the same safe progress client", async () => {
+  const storage = createStorage();
+  const { queuePendingProgress } = createStateBackedQueue(storage);
+  const messages = [];
+  const client = createProgressClient({
+    fetchImpl: async () => { throw new TypeError("offline"); },
+    queuePendingProgress,
+    onPending: (message) => messages.push(message),
+  });
+
+  const result = await client.saveMissionProgress("api-service-v1", missionState);
+
+  assert.equal(result, null);
+  assert.deepEqual(messages, [PENDING_PROGRESS_MESSAGE]);
+  assert.deepEqual(JSON.parse(storage.getItem(LEARNING_ROUTE_STORAGE_KEY)).pendingProgress, [{
+    kind: "missionProgress",
+    payload: { missionId: "api-service-v1", ...missionState },
+  }]);
+});
+
+test("a mission self-review keeps the explicit mission ID as its write authority", async () => {
+  const requests = [];
+  const client = createProgressClient({
+    fetchImpl: async (url, options) => {
+      requests.push([url, options]);
+      return { ok: true, status: 200, json: async () => ({}) };
+    },
+  });
+
+  await client.saveMissionProgress("api-service-v1", {
+    ...missionState,
+    missionId: "python-tool-v1",
+  });
+
+  assert.deepEqual(requests, [["/api/progress/missions/api-service-v1", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(missionState),
+  }]]);
 });
 
 test("focus-lens preview, save, and reload use same-origin requests and report unavailable saves honestly", async () => {

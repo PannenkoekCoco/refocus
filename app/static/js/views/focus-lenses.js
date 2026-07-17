@@ -40,6 +40,24 @@ function normaliseSkills(skills, topics) {
   ));
 }
 
+function normaliseDrafts(value, topics) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([kind, draft]) => (
+      KIND_COPY[kind]
+      && draft
+      && typeof draft === "object"
+      && !Array.isArray(draft)
+      && typeof draft.originalText === "string"
+        ? [[kind, {
+          originalText: draft.originalText,
+          skills: normaliseSkills(draft.skills, topics),
+        }]]
+        : []
+    )),
+  );
+}
+
 function activeLensForKind(lenses, kind) {
   return lenses.find((lens) => lens?.kind === kind && lens.isActive)
     ?? lenses.find((lens) => lens?.kind === kind)
@@ -54,13 +72,16 @@ export function renderFocusLenses({
   container,
   topics,
   lenses = [],
+  draft = null,
   tts,
   onNarrationError = () => {},
   onPreview = async () => null,
   onApply = async () => {},
+  onDraftChange = () => {},
   onStatus = () => {},
 }) {
-  let selectedKind = "job";
+  const draftsByKind = normaliseDrafts(draft?.byKind, topics);
+  let selectedKind = KIND_COPY[draft?.selectedKind] ? draft.selectedKind : "job";
   let selectedLens = activeLensForKind(lenses, selectedKind);
   let currentSkills = normaliseSkills(selectedLens?.skills, topics);
 
@@ -108,6 +129,30 @@ export function renderFocusLenses({
   skillsPanel.className = "focus-lens-skills";
   field.append(label, textarea, privacy, preview, skillsPanel);
 
+  function copySkills(skills) {
+    return skills.map((skill) => ({ ...skill }));
+  }
+
+  function publishDraft() {
+    onDraftChange({
+      selectedKind,
+      byKind: Object.fromEntries(
+        Object.entries(draftsByKind).map(([kind, currentDraft]) => [kind, {
+          originalText: currentDraft.originalText,
+          skills: copySkills(currentDraft.skills),
+        }]),
+      ),
+    });
+  }
+
+  function rememberCurrentDraft() {
+    draftsByKind[selectedKind] = {
+      originalText: textarea.value,
+      skills: copySkills(currentSkills),
+    };
+    publishDraft();
+  }
+
   function renderSkillControls() {
     skillsPanel.replaceChildren();
     if (currentSkills.length === 0) {
@@ -151,6 +196,7 @@ export function renderFocusLenses({
         const nextWeight = Number(input.value);
         currentSkills[index] = { ...currentSkills[index], weight: nextWeight };
         output.textContent = readableWeight(nextWeight);
+        rememberCurrentDraft();
       });
       row.append(rowLabel, input, output);
       list.append(row);
@@ -193,10 +239,13 @@ export function renderFocusLenses({
   function loadKind(kind) {
     selectedKind = kind;
     selectedLens = activeLensForKind(lenses, selectedKind);
-    currentSkills = normaliseSkills(selectedLens?.skills, topics);
+    const currentDraft = draftsByKind[selectedKind];
+    currentSkills = currentDraft
+      ? normaliseSkills(currentDraft.skills, topics)
+      : normaliseSkills(selectedLens?.skills, topics);
     label.textContent = KIND_COPY[selectedKind].field;
     textarea.placeholder = KIND_COPY[selectedKind].intro;
-    textarea.value = selectedLens?.originalText ?? "";
+    textarea.value = currentDraft?.originalText ?? selectedLens?.originalText ?? "";
     updateKindControls();
     renderSkillControls();
   }
@@ -206,9 +255,14 @@ export function renderFocusLenses({
     control.type = "button";
     control.className = "secondary";
     control.dataset.focusKind = kind;
-    control.addEventListener("click", () => loadKind(kind));
+    control.addEventListener("click", () => {
+      loadKind(kind);
+      publishDraft();
+    });
     kindControls.append(control);
   }
+
+  textarea.addEventListener("input", rememberCurrentDraft);
 
   preview.addEventListener("click", async () => {
     const originalText = textarea.value;
@@ -225,6 +279,7 @@ export function renderFocusLenses({
         return;
       }
       currentSkills = normaliseSkills(result.skills, topics);
+      rememberCurrentDraft();
       renderSkillControls();
       onStatus("Preview ready. Adjust the topic weights, then apply them to your route.");
     } catch {

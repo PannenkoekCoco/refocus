@@ -442,3 +442,275 @@ test("keyboard focus, polite status, and the route grid work at mobile and deskt
   ));
   expect(desktopColumns).toBe(3);
 });
+
+test("offline progress sync hydrates once, acknowledges only delivered work, and keeps a local mission reflection", async ({ page }) => {
+  const offlineQuizAttempt = {
+    attemptId: "5dd72f13-4d53-4a7d-9d07-c17b9e8ff89b",
+    lessonId: "apis",
+    answers: [{ questionId: "invalid-input", choiceIndex: 1, correct: true }],
+  };
+  const offlineMission = {
+    missionId: "api-service-v1",
+    approach: "guided",
+    reflection: "Keep this offline reflection after hydration.",
+    status: "self_reviewed",
+  };
+  await page.addInitScript(({ quizAttempt, mission }) => {
+    localStorage.setItem("engineeringLearningRoute.v1", JSON.stringify({
+      pinnedTopicId: "retrieval-augmented-generation",
+      exploredLessonIds: ["apis"],
+      quizAttempts: { apis: { correct: 3, total: 3 } },
+      missionStates: { "api-service-v1": mission },
+      pendingProgress: [{
+        kind: "topicProgress",
+        payload: { topicId: "apis", status: "explored" },
+      }, {
+        kind: "quizAttempt",
+        payload: quizAttempt,
+      }, {
+        kind: "missionProgress",
+        payload: mission,
+      }],
+    }));
+  }, { quizAttempt: offlineQuizAttempt, mission: offlineMission });
+
+  let snapshotRequests = 0;
+  let releaseSnapshot;
+  const snapshotGate = new Promise((resolve) => {
+    releaseSnapshot = resolve;
+  });
+  const progressWrites = [];
+  await mockInitialBrowserApis(page);
+  await page.route("**/api/progress", async (route) => {
+    snapshotRequests += 1;
+    await snapshotGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        topics: [{
+          id: "00000000-0000-0000-0000-000000000001",
+          topicId: "sql",
+          status: "explored",
+          updatedAt: "2026-07-17T00:00:00Z",
+        }],
+        quizAttempts: [{ lessonId: "python-beyond-scripts", correct: 1, total: 3 }],
+        missions: [{
+          id: "00000000-0000-0000-0000-000000000002",
+          missionId: "api-service-v1",
+          approach: "guided",
+          reflection: "This server reflection must not replace local work.",
+          status: "self_reviewed",
+          updatedAt: "2026-07-17T00:00:00Z",
+        }],
+      }),
+    });
+  });
+  await page.route("**/api/progress/**", async (route) => {
+    progressWrites.push({
+      url: new URL(route.request().url()).pathname,
+      method: route.request().method(),
+      body: route.request().postDataJSON(),
+    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => snapshotRequests).toBe(1);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await page.waitForTimeout(100);
+  expect(snapshotRequests).toBe(1);
+  releaseSnapshot();
+
+  await expect.poll(() => progressWrites.length).toBe(3);
+  await expect.poll(async () => page.evaluate(() => (
+    JSON.parse(localStorage.getItem("engineeringLearningRoute.v1")).pendingProgress?.length ?? 0
+  ))).toBe(0);
+  expect(progressWrites).toEqual([
+    {
+      url: "/api/progress/topic/apis",
+      method: "PUT",
+      body: { status: "explored" },
+    },
+    {
+      url: "/api/progress/quiz-attempts",
+      method: "POST",
+      body: offlineQuizAttempt,
+    },
+    {
+      url: "/api/progress/missions/api-service-v1",
+      method: "PUT",
+      body: {
+        approach: offlineMission.approach,
+        reflection: offlineMission.reflection,
+        status: offlineMission.status,
+      },
+    },
+  ]);
+
+  const pythonCard = page.locator('.topic-card[data-topic-id="python-beyond-scripts"]');
+  await expect(pythonCard).toContainText("Quiz complete: 1/3.");
+  await openRouteTopic(page, "apis", "Open APIs");
+  await page.getByRole("button", { name: "Start quiz" }).click();
+  await completeCurrentQuizWithCorrectBAnswers(page);
+  await page.getByRole("button", { name: "See results" }).click();
+  await page.getByRole("button", { name: "Ship a small API service" }).click();
+  await expect(page.getByRole("textbox", { name: "Short reflection" })).toHaveValue(offlineMission.reflection);
+});
+
+test("a failed offline progress replay remains queued and keeps the established pending message", async ({ page }) => {
+  const pendingTopic = {
+    kind: "topicProgress",
+    payload: { topicId: "apis", status: "explored" },
+  };
+  await page.addInitScript((record) => {
+    localStorage.setItem("engineeringLearningRoute.v1", JSON.stringify({ pendingProgress: [record] }));
+  }, pendingTopic);
+
+  let replayWrites = 0;
+  await mockInitialBrowserApis(page);
+  await page.route("**/api/progress", async (route) => {
+    await route.fulfill({ status: 401, contentType: "application/json", body: "{}" });
+  });
+  await page.route("**/api/progress/**", async (route) => {
+    replayWrites += 1;
+    await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => replayWrites).toBe(1);
+  await expect(page.getByText("Saved locally; sign in or retry to sync.", { exact: true })).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(
+    localStorage.getItem("engineeringLearningRoute.v1"),
+  ).pendingProgress)).toEqual([pendingTopic]);
+});
+
+test("online progress hydration does not replace an unsaved mission reflection", async ({ page }) => {
+  let snapshotRequests = 0;
+  await mockInitialBrowserApis(page);
+  await page.route("**/api/progress", async (route) => {
+    snapshotRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ topics: [], quizAttempts: [], missions: [] }),
+    });
+  });
+  await page.route("**/api/progress/**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => snapshotRequests).toBe(1);
+  await openRouteTopic(page, "apis", "Open APIs");
+  await page.getByRole("button", { name: "Start quiz" }).click();
+  await completeCurrentQuizWithCorrectBAnswers(page);
+  await page.getByRole("button", { name: "See results" }).click();
+  await page.getByRole("button", { name: "Ship a small API service" }).click();
+
+  const reflection = page.getByRole("textbox", { name: "Short reflection" });
+  await reflection.fill("Keep this unfinished reflection in the browser.");
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect.poll(() => snapshotRequests).toBe(2);
+  await expect(reflection).toHaveValue("Keep this unfinished reflection in the browser.");
+});
+
+test("startup progress sync absorbs an early online event without repeating the snapshot or replay", async ({ page }) => {
+  const pendingTopic = {
+    kind: "topicProgress",
+    payload: { topicId: "apis", status: "explored" },
+  };
+  await page.addInitScript((record) => {
+    localStorage.setItem("engineeringLearningRoute.v1", JSON.stringify({ pendingProgress: [record] }));
+  }, pendingTopic);
+
+  let topicsRequests = 0;
+  let releaseTopics;
+  const topicsGate = new Promise((resolve) => {
+    releaseTopics = resolve;
+  });
+  let snapshotRequests = 0;
+  let replayWrites = 0;
+  await mockInitialBrowserApis(page);
+  await page.route("**/api/content/topics", async (route) => {
+    topicsRequests += 1;
+    await topicsGate;
+    await route.continue();
+  });
+  await page.route("**/api/progress", async (route) => {
+    snapshotRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ topics: [], quizAttempts: [], missions: [] }),
+    });
+  });
+  await page.route("**/api/progress/**", async (route) => {
+    replayWrites += 1;
+    await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+  });
+
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect.poll(() => topicsRequests).toBe(1);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await page.waitForTimeout(100);
+  releaseTopics();
+
+  await expect(page.getByRole("heading", { name: "Your flexible route" })).toBeVisible();
+  await expect.poll(() => snapshotRequests).toBe(1);
+  await expect.poll(() => replayWrites).toBe(1);
+  await page.waitForTimeout(150);
+  expect(snapshotRequests).toBe(1);
+  expect(replayWrites).toBe(1);
+});
+
+test("online hydration preserves an unapplied focus-lens draft without caching its source text", async ({ page }) => {
+  const privateDraft = "Keep this job description only in the current browser memory.";
+  let snapshotRequests = 0;
+  await mockInitialBrowserApis(page);
+  await page.route("**/api/focus-lenses/preview", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ skills: [{ topicId: "apis", weight: 0.6 }] }),
+    });
+  });
+  await page.route("**/api/progress", async (route) => {
+    snapshotRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        topics: [{
+          id: "00000000-0000-0000-0000-000000000003",
+          topicId: "sql",
+          status: "explored",
+          updatedAt: "2026-07-17T00:00:00Z",
+        }],
+        quizAttempts: [],
+        missions: [],
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => snapshotRequests).toBe(1);
+  await expect.poll(async () => page.evaluate(() => JSON.parse(
+    localStorage.getItem("engineeringLearningRoute.v1"),
+  ).exploredLessonIds.includes("sql"))).toBe(true);
+
+  const jobDescription = page.getByRole("textbox", { name: "Job description" });
+  await jobDescription.fill(privateDraft);
+  await page.getByRole("button", { name: "Preview skills" }).click();
+  const apiWeight = page.getByRole("slider", { name: "APIs weight" });
+  await expect(apiWeight).toHaveValue("0.6");
+  await apiWeight.press("End");
+  await expect(apiWeight).toHaveValue("1");
+
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect.poll(() => snapshotRequests).toBe(2);
+  await expect(jobDescription).toHaveValue(privateDraft);
+  await expect(apiWeight).toHaveValue("1");
+  const cached = await page.evaluate(() => localStorage.getItem("engineeringLearningRoute.v1"));
+  expect(cached).not.toContain(privateDraft);
+});
