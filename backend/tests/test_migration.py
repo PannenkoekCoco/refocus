@@ -77,6 +77,21 @@ def test_github_oauth_capacity_migration_reserves_database_owned_slots() -> None
     assert "10000" in text
 
 
+def test_learning_progress_snapshot_migration_adds_owner_scoped_mission_state() -> None:
+    migration = Path(__file__).parents[1] / "alembic" / "versions" / "0005_learning_progress_snapshot.py"
+
+    assert migration.exists()
+    text = migration.read_text(encoding="utf-8")
+    assert 'revision: str = "0005_learning_progress_snapshot"' in text
+    assert 'down_revision: str | None = "0004_oauth_transaction_slots"' in text
+    assert re.search(r'op\.create_table\(\s*"mission_progress"', text)
+    assert 'sa.Column("user_id", sa.Uuid(), nullable=False)' in text
+    assert 'sa.Column("mission_id", sa.String(length=120), nullable=False)' in text
+    assert 'ondelete="CASCADE"' in text
+    assert "uq_mission_progress_user_mission" in text
+    assert "self_reviewed" in text
+
+
 def test_all_migrations_apply_on_sqlite_for_local_development(tmp_path: Path) -> None:
     backend_root = Path(__file__).parents[1]
     database_path = tmp_path / "refocus-migrations.db"
@@ -106,6 +121,14 @@ def test_all_migrations_apply_on_sqlite_for_local_development(tmp_path: Path) ->
         transaction_slot_count = connection.execute(
             "SELECT COUNT(*) FROM github_oauth_transaction_slots"
         ).fetchone()[0]
+        mission_progress_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(mission_progress)")
+        }
+        mission_progress_foreign_keys = list(
+            connection.execute("PRAGMA foreign_key_list(mission_progress)")
+        )
+        head = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     finally:
         connection.close()
 
@@ -119,4 +142,10 @@ def test_all_migrations_apply_on_sqlite_for_local_development(tmp_path: Path) ->
     assert any(
         foreign_key[3] == "transaction_id" and foreign_key[6].upper() == "SET NULL"
         for foreign_key in transaction_slot_foreign_keys
+    )
+    assert head == "0005_learning_progress_snapshot"
+    assert {"id", "user_id", "mission_id", "approach", "reflection", "status", "updated_at"} <= mission_progress_columns
+    assert any(
+        foreign_key[3] == "user_id" and foreign_key[6].upper() == "CASCADE"
+        for foreign_key in mission_progress_foreign_keys
     )

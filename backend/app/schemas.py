@@ -166,6 +166,39 @@ class QuizAttemptView(ContentModel):
     created_at: datetime = Field(serialization_alias="createdAt")
 
 
+class QuizOutcomeView(ContentModel):
+    lesson_id: str = Field(serialization_alias="lessonId")
+    correct: int = Field(ge=0)
+    total: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def correct_answers_cannot_exceed_total(self) -> "QuizOutcomeView":
+        if self.correct > self.total:
+            raise ValueError("correct cannot exceed total")
+        return self
+
+
+class MissionProgressInput(ContentModel):
+    approach: Literal["guided", "byop"]
+    reflection: str = Field(max_length=500)
+    status: Literal["self_reviewed"]
+
+
+class MissionProgressView(ContentModel):
+    id: UUID
+    mission_id: str = Field(serialization_alias="missionId")
+    approach: Literal["guided", "byop"]
+    reflection: str
+    status: Literal["self_reviewed"]
+    updated_at: datetime = Field(serialization_alias="updatedAt")
+
+
+class ProgressSnapshotView(ContentModel):
+    topics: list[TopicProgressView]
+    quiz_attempts: list[QuizOutcomeView] = Field(serialization_alias="quizAttempts")
+    missions: list[MissionProgressView]
+
+
 class FocusLensModel(ContentModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True, allow_inf_nan=False)
 

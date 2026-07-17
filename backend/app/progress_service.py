@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -6,8 +7,22 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import QuizAttempt, TopicProgress, utcnow
-from app.schemas import QuizAttemptInput
+from app.models import MissionProgress, QuizAttempt, TopicProgress, utcnow
+from app.schemas import MissionProgressInput, QuizAttemptInput
+
+
+@dataclass(frozen=True)
+class QuizOutcome:
+    lesson_id: str
+    correct: int
+    total: int
+
+
+@dataclass(frozen=True)
+class ProgressSnapshot:
+    topics: list[TopicProgress]
+    quiz_outcomes: list[QuizOutcome]
+    missions: list[MissionProgress]
 
 
 def conflict_aware_insert(database: AsyncSession, model: type[Any]) -> Any:
@@ -94,3 +109,86 @@ async def create_quiz_attempt(
         )
     )).scalar_one()
     return quiz_attempt, inserted_id is not None
+
+
+async def upsert_mission_progress(
+    database: AsyncSession,
+    *,
+    user_id: UUID,
+    mission_id: str,
+    payload: MissionProgressInput,
+) -> MissionProgress:
+    now = utcnow()
+    statement = (
+        conflict_aware_insert(database, MissionProgress)
+        .values(
+            id=uuid4(),
+            user_id=user_id,
+            mission_id=mission_id,
+            approach=payload.approach,
+            reflection=payload.reflection,
+            status=payload.status,
+            updated_at=now,
+        )
+        .on_conflict_do_update(
+            index_elements=["user_id", "mission_id"],
+            set_={
+                "approach": payload.approach,
+                "reflection": payload.reflection,
+                "status": payload.status,
+                "updated_at": now,
+            },
+        )
+    )
+    await database.execute(statement)
+    await database.commit()
+    return (await database.execute(
+        select(MissionProgress).where(
+            MissionProgress.user_id == user_id,
+            MissionProgress.mission_id == mission_id,
+        )
+    )).scalar_one()
+
+
+def quiz_outcome(attempt: QuizAttempt) -> QuizOutcome:
+    answers = attempt.answers_json if isinstance(attempt.answers_json, list) else []
+    answer_records = [answer for answer in answers if isinstance(answer, dict)]
+    return QuizOutcome(
+        lesson_id=attempt.lesson_id,
+        correct=sum(answer.get("correct") is True for answer in answer_records),
+        total=len(answer_records),
+    )
+
+
+async def get_progress_snapshot(
+    database: AsyncSession,
+    *,
+    user_id: UUID,
+) -> ProgressSnapshot:
+    topics = list((await database.execute(
+        select(TopicProgress)
+        .where(TopicProgress.user_id == user_id)
+        .order_by(TopicProgress.topic_id.asc())
+    )).scalars())
+    attempts = list((await database.execute(
+        select(QuizAttempt)
+        .where(QuizAttempt.user_id == user_id)
+        .order_by(
+            QuizAttempt.lesson_id.asc(),
+            QuizAttempt.created_at.desc(),
+            QuizAttempt.id.desc(),
+        )
+    )).scalars())
+    latest_attempts: dict[str, QuizAttempt] = {}
+    for attempt in attempts:
+        latest_attempts.setdefault(attempt.lesson_id, attempt)
+    missions = list((await database.execute(
+        select(MissionProgress)
+        .where(MissionProgress.user_id == user_id)
+        .order_by(MissionProgress.mission_id.asc())
+    )).scalars())
+    return ProgressSnapshot(
+        topics=topics,
+        quiz_outcomes=[quiz_outcome(attempt) for attempt in latest_attempts.values()],
+        missions=missions,
+    )

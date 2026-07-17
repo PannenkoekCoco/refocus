@@ -65,6 +65,16 @@ def _create_schema(database_path: Path) -> None:
                 created_at DATETIME NOT NULL,
                 CONSTRAINT uq_quiz_attempt_user_client_attempt UNIQUE (user_id, client_attempt_id)
             );
+            CREATE TABLE mission_progress (
+                id CHAR(32) PRIMARY KEY,
+                user_id CHAR(32) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                mission_id VARCHAR(120) NOT NULL,
+                approach VARCHAR(16) NOT NULL,
+                reflection TEXT NOT NULL CHECK (length(reflection) <= 500),
+                status VARCHAR(32) NOT NULL,
+                updated_at DATETIME NOT NULL,
+                CONSTRAINT uq_mission_progress_user_mission UNIQUE (user_id, mission_id)
+            );
             CREATE TABLE focus_lenses (
                 id CHAR(32) PRIMARY KEY,
                 user_id CHAR(32) NOT NULL REFERENCES users(id) ON DELETE CASCADE,

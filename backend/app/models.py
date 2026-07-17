@@ -74,6 +74,28 @@ class QuizAttempt(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class MissionProgress(Base):
+    __tablename__ = "mission_progress"
+    __table_args__ = (
+        UniqueConstraint("user_id", "mission_id", name="uq_mission_progress_user_mission"),
+        CheckConstraint("approach IN ('guided', 'byop')", name="ck_mission_progress_approach"),
+        CheckConstraint("status = 'self_reviewed'", name="ck_mission_progress_status"),
+        CheckConstraint("length(reflection) <= 500", name="ck_mission_progress_reflection_length"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    mission_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    approach: Mapped[str] = mapped_column(String(16), nullable=False)
+    reflection: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class FocusLens(Base):
     __tablename__ = "focus_lenses"
     __table_args__ = (
