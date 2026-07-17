@@ -555,6 +555,7 @@ test("offline progress sync hydrates once, acknowledges only delivered work, and
   await completeCurrentQuizWithCorrectBAnswers(page);
   await page.getByRole("button", { name: "See results" }).click();
   await page.getByRole("button", { name: "Ship a small API service" }).click();
+  expect(snapshotRequests).toBe(1);
   await expect(page.getByRole("textbox", { name: "Short reflection" })).toHaveValue(offlineMission.reflection);
 });
 
@@ -713,4 +714,110 @@ test("online hydration preserves an unapplied focus-lens draft without caching i
   await expect(apiWeight).toHaveValue("1");
   const cached = await page.evaluate(() => localStorage.getItem("engineeringLearningRoute.v1"));
   expect(cached).not.toContain(privateDraft);
+});
+
+test("a direct quiz save waits for the stale startup snapshot and then replays from the durable outbox", async ({ page }) => {
+  let releaseSnapshot;
+  const snapshotGate = new Promise((resolve) => {
+    releaseSnapshot = resolve;
+  });
+  let snapshotRequests = 0;
+  let quizWrites = 0;
+  await mockInitialBrowserApis(page);
+  await page.route("**/api/progress", async (route) => {
+    snapshotRequests += 1;
+    await snapshotGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        topics: [],
+        quizAttempts: [{ lessonId: "apis", correct: 1, total: 3 }],
+        missions: [],
+      }),
+    });
+  });
+  await page.route("**/api/progress/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/progress/quiz-attempts") quizWrites += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => snapshotRequests).toBe(1);
+  await openRouteTopic(page, "apis", "Open APIs");
+  await page.getByRole("button", { name: "Start quiz" }).click();
+  await completeCurrentQuizWithCorrectBAnswers(page);
+  await expect.poll(async () => page.evaluate(() => JSON.parse(
+    localStorage.getItem("engineeringLearningRoute.v1"),
+  ).quizAttempts.apis)).toEqual({ correct: 3, total: 3 });
+
+  releaseSnapshot();
+
+  await expect.poll(async () => page.evaluate(() => JSON.parse(
+    localStorage.getItem("engineeringLearningRoute.v1"),
+  ).quizAttempts.apis)).toEqual({ correct: 3, total: 3 });
+  await expect.poll(() => quizWrites).toBe(1);
+  await expect.poll(async () => page.evaluate(() => (
+    JSON.parse(localStorage.getItem("engineeringLearningRoute.v1")).pendingProgress?.length ?? 0
+  ))).toBe(0);
+  expect(snapshotRequests).toBe(1);
+});
+
+test("a progress record queued during an active replay is sent by the next durable sync pass", async ({ page }) => {
+  const pendingApisTopic = {
+    kind: "topicProgress",
+    payload: { topicId: "apis", status: "explored" },
+  };
+  await page.addInitScript((record) => {
+    localStorage.setItem("engineeringLearningRoute.v1", JSON.stringify({ pendingProgress: [record] }));
+  }, pendingApisTopic);
+
+  let snapshotRequests = 0;
+  let apiReplayStarted = false;
+  let releaseApiReplay;
+  const apiReplayGate = new Promise((resolve) => {
+    releaseApiReplay = resolve;
+  });
+  const writePaths = [];
+  await mockInitialBrowserApis(page);
+  await page.route("**/api/progress", async (route) => {
+    snapshotRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ topics: [], quizAttempts: [], missions: [] }),
+    });
+  });
+  await page.route("**/api/progress/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    writePaths.push(path);
+    if (path === "/api/progress/topic/apis") {
+      apiReplayStarted = true;
+      await apiReplayGate;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => apiReplayStarted).toBe(true);
+
+  await openRouteTopic(page, "sql", "Open SQL");
+  await expect.poll(async () => page.evaluate(() => JSON.parse(
+    localStorage.getItem("engineeringLearningRoute.v1"),
+  ).pendingProgress?.some((record) => (
+    record.kind === "topicProgress" && record.payload.topicId === "sql"
+  )))).toBe(true);
+  expect(writePaths).toEqual(["/api/progress/topic/apis"]);
+
+  releaseApiReplay();
+
+  await expect.poll(() => writePaths).toEqual([
+    "/api/progress/topic/apis",
+    "/api/progress/topic/sql",
+  ]);
+  await expect.poll(async () => page.evaluate(() => (
+    JSON.parse(localStorage.getItem("engineeringLearningRoute.v1")).pendingProgress?.length ?? 0
+  ))).toBe(0);
+  expect(snapshotRequests).toBe(1);
 });

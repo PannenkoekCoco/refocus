@@ -21,6 +21,7 @@ function isNonNegativeInteger(value) {
 function isProgressSnapshotTopic(value) {
   return isRecord(value)
     && typeof value.id === "string"
+    && typeof value.topicId === "string"
     && MISSION_ID_PATTERN.test(value.topicId)
     && ["explored", "completed"].includes(value.status)
     && typeof value.updatedAt === "string";
@@ -37,6 +38,7 @@ function isProgressSnapshotAttempt(value) {
 function isProgressSnapshotMission(value) {
   return isRecord(value)
     && typeof value.id === "string"
+    && typeof value.missionId === "string"
     && MISSION_ID_PATTERN.test(value.missionId)
     && ["guided", "byop"].includes(value.approach)
     && typeof value.reflection === "string"
@@ -108,6 +110,14 @@ function announcePendingPersistence(onPending, persisted) {
   onPending(persisted ? PENDING_PROGRESS_MESSAGE : LOCAL_PROGRESS_UNAVAILABLE_MESSAGE);
 }
 
+function notifyProgressQueued(callback, record) {
+  try {
+    callback(record);
+  } catch {
+    // Scheduling a later sync must not undo a record that is already durable locally.
+  }
+}
+
 function progressRequest(record) {
   if (record.kind === "quizAttempt") {
     return {
@@ -150,6 +160,7 @@ export function createProgressClient({
   fetchImpl = globalThis.fetch?.bind(globalThis),
   queuePendingProgress = () => false,
   onPending = () => {},
+  onQueued = () => {},
 } = {}) {
   async function sendProgressRecord(record) {
     const [normalisedRecord] = normalisePendingProgress([record]);
@@ -159,19 +170,19 @@ export function createProgressClient({
     return fetchImpl(url, options);
   }
 
-  async function saveProgressRecord(record) {
-    const response = await sendProgressRecord(record);
-    if (!response.ok) throw new Error("Progress sync failed");
-    return response.json();
-  }
-
-  async function saveOrQueue(record) {
-    try {
-      return await saveProgressRecord(record);
-    } catch {
-      announcePendingPersistence(onPending, queuePendingRecord(queuePendingProgress, record));
+  function queueProgressRecord(record) {
+    const [normalisedRecord] = normalisePendingProgress([record]);
+    if (!normalisedRecord) {
+      announcePendingPersistence(onPending, false);
       return null;
     }
+    const persisted = queuePendingRecord(queuePendingProgress, normalisedRecord);
+    if (!persisted) {
+      announcePendingPersistence(onPending, false);
+      return null;
+    }
+    notifyProgressQueued(onQueued, normalisedRecord);
+    return null;
   }
 
   async function saveQuizAttempt(attempt) {
@@ -179,15 +190,15 @@ export function createProgressClient({
       ...attempt,
       ...(attempt.attemptId ? {} : { attemptId: newAttemptId() }),
     };
-    return saveOrQueue({ kind: "quizAttempt", payload });
+    return queueProgressRecord({ kind: "quizAttempt", payload });
   }
 
   async function saveTopicProgress(topicId, status) {
-    return saveOrQueue({ kind: "topicProgress", payload: { topicId, status } });
+    return queueProgressRecord({ kind: "topicProgress", payload: { topicId, status } });
   }
 
   async function saveMissionProgress(missionId, missionState) {
-    return saveOrQueue({
+    return queueProgressRecord({
       kind: "missionProgress",
       payload: { ...missionState, missionId },
     });

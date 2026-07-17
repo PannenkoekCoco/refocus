@@ -10,6 +10,7 @@ import { createTtsProvider } from "./services/tts.js";
 import {
   createStore,
   loadLearningState,
+  pendingProgressKey,
   persistLearningState,
 } from "./state/store.js";
 import { selectRecommendedTopic, selectRouteView } from "./state/selectors.js";
@@ -75,20 +76,32 @@ function renderLoading(message) {
 const storage = getBrowserStorage();
 const store = createStore(loadLearningState(storage));
 let latestPersistenceSucceeded = true;
+let pendingProgressGeneration = 0;
 store.subscribe((state) => {
   latestPersistenceSucceeded = persistLearningState(storage, state);
 });
 
 function queuePendingProgress(record) {
+  const progressKey = pendingProgressKey(record);
+  if (!progressKey) return false;
   const previousState = store.getState();
+  const wasQueued = (previousState.pendingProgress ?? []).some((candidate) => (
+    pendingProgressKey(candidate) === progressKey
+  ));
   const nextState = store.dispatch({ type: "queuePendingProgress", record });
-  return nextState !== previousState && latestPersistenceSucceeded;
+  const isQueued = (nextState.pendingProgress ?? []).some((candidate) => (
+    pendingProgressKey(candidate) === progressKey
+  ));
+  if (!isQueued || !latestPersistenceSucceeded) return false;
+  if (!wasQueued) pendingProgressGeneration += 1;
+  return true;
 }
 
 const progressClient = createProgressClient({
   fetchImpl: window.fetch.bind(window),
   queuePendingProgress,
   onPending: statusMessage.announce,
+  onQueued: () => { void syncProgress(); },
 });
 const focusLensClient = createFocusLensClient({
   fetchImpl: window.fetch.bind(window),
@@ -110,54 +123,88 @@ let githubConnection = null;
 let currentView = { name: "loading" };
 let progressSyncPromise = null;
 let progressSyncReady = false;
+let progressSyncRequested = false;
+let progressSyncNeedsSnapshot = false;
+let progressSyncSnapshotScheduled = false;
 let focusLensDraft = null;
 
 function renderAfterProgressSync() {
   if (currentView.name === "route") render();
 }
 
-function syncProgress() {
-  if (progressSyncPromise !== null) return progressSyncPromise;
-  const sync = (async () => {
-    let didChangeState = false;
+async function syncProgressPass({ hydrate }) {
+  let didChangeState = false;
+  if (hydrate) {
     const snapshot = await progressClient.loadSnapshot();
     if (snapshot !== null) {
       const previousState = store.getState();
       const nextState = store.dispatch({ type: "hydrateServerProgress", snapshot });
       didChangeState = nextState !== previousState;
     }
+  }
 
-    const pendingRecords = [...(store.getState().pendingProgress ?? [])];
-    if (pendingRecords.length === 0) {
-      if (didChangeState) renderAfterProgressSync();
-      return;
-    }
+  const pendingRecords = [...(store.getState().pendingProgress ?? [])];
+  const capturedGeneration = pendingProgressGeneration;
+  if (pendingRecords.length === 0) {
+    return { capturedGeneration, didChangeState };
+  }
 
-    let acknowledgedKeys = [];
-    try {
-      acknowledgedKeys = await progressClient.replayPendingProgress(pendingRecords);
-    } catch {
-      acknowledgedKeys = [];
-    }
-    if (acknowledgedKeys.length > 0) {
-      const previousState = store.getState();
-      const nextState = store.dispatch({ type: "ackPendingProgress", keys: acknowledgedKeys });
-      didChangeState = didChangeState || nextState !== previousState;
-    }
-    if ((store.getState().pendingProgress ?? []).length > 0) {
-      statusMessage.announce(PENDING_PROGRESS_MESSAGE);
+  let acknowledgedKeys = [];
+  try {
+    acknowledgedKeys = await progressClient.replayPendingProgress(pendingRecords);
+  } catch {
+    acknowledgedKeys = [];
+  }
+  if (acknowledgedKeys.length > 0) {
+    const previousState = store.getState();
+    const nextState = store.dispatch({ type: "ackPendingProgress", keys: acknowledgedKeys });
+    didChangeState = didChangeState || nextState !== previousState;
+  }
+  if ((store.getState().pendingProgress ?? []).length > 0) {
+    statusMessage.announce(PENDING_PROGRESS_MESSAGE);
+  }
+  return { capturedGeneration, didChangeState };
+}
+
+function syncProgress({ hydrate = false } = {}) {
+  const shouldScheduleSnapshot = hydrate && !progressSyncSnapshotScheduled;
+  if (shouldScheduleSnapshot) {
+    progressSyncNeedsSnapshot = true;
+    progressSyncSnapshotScheduled = true;
+  }
+  if (!hydrate || shouldScheduleSnapshot || progressSyncPromise === null) {
+    progressSyncRequested = true;
+  }
+  if (progressSyncPromise !== null) return progressSyncPromise;
+  const sync = (async () => {
+    let didChangeState = false;
+    while (progressSyncRequested) {
+      progressSyncRequested = false;
+      const shouldHydrate = progressSyncNeedsSnapshot;
+      progressSyncNeedsSnapshot = false;
+      let pass;
+      try {
+        pass = await syncProgressPass({ hydrate: shouldHydrate });
+      } finally {
+        if (shouldHydrate) progressSyncSnapshotScheduled = false;
+      }
+      didChangeState = didChangeState || pass.didChangeState;
+      if (pendingProgressGeneration > pass.capturedGeneration) {
+        progressSyncRequested = true;
+      }
     }
     if (didChangeState) renderAfterProgressSync();
   })();
   progressSyncPromise = sync.finally(() => {
     progressSyncPromise = null;
+    if (progressSyncRequested) void syncProgress();
   });
   return progressSyncPromise;
 }
 
 window.addEventListener("online", () => {
   if (!progressSyncReady) return;
-  void syncProgress();
+  void syncProgress({ hydrate: true });
 });
 
 function getRecommendation() {
@@ -486,7 +533,7 @@ async function start() {
     currentView = { name: "route" };
     render();
     progressSyncReady = true;
-    void syncProgress();
+    void syncProgress({ hydrate: true });
     void loadSavedFocusLenses();
     void loadGitHubConnection({ rerender: false });
   } catch {

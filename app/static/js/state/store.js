@@ -76,7 +76,7 @@ function normaliseMissionStates(value) {
   return Object.fromEntries(
     Object.entries(value).flatMap(([missionId, missionState]) => {
       const normalisedMission = normaliseMissionState(missionState);
-      return MISSION_ID_PATTERN.test(missionId) && normalisedMission
+      return typeof missionId === "string" && MISSION_ID_PATTERN.test(missionId) && normalisedMission
         ? [[missionId, normalisedMission]]
         : [];
     }),
@@ -110,13 +110,13 @@ export function normalisePendingProgress(value) {
     }
     if (record.kind === "topicProgress") {
       const { topicId, status } = record.payload;
-      if (!TOPIC_ID_PATTERN.test(topicId) || !["explored", "completed"].includes(status)) return [];
+      if (typeof topicId !== "string" || !TOPIC_ID_PATTERN.test(topicId) || !["explored", "completed"].includes(status)) return [];
       return [{ kind: "topicProgress", payload: { topicId, status } }];
     }
     if (record.kind === "missionProgress") {
       const { missionId } = record.payload;
       const missionState = normaliseMissionState(record.payload);
-      if (!MISSION_ID_PATTERN.test(missionId) || !missionState) return [];
+      if (typeof missionId !== "string" || !MISSION_ID_PATTERN.test(missionId) || !missionState) return [];
       return [{
         kind: "missionProgress",
         payload: { missionId, ...missionState },
@@ -159,12 +159,25 @@ function queuePendingProgress(state, record) {
   };
 }
 
+function acknowledgeProgressRecords(state, field, keys) {
+  if (!Array.isArray(keys)) return state;
+  const acknowledgedKeys = new Set(keys.filter((key) => typeof key === "string"));
+  if (acknowledgedKeys.size === 0) return state;
+  const progressRecords = normalisePendingProgress(state[field]);
+  const remainingRecords = progressRecords.filter((record) => !acknowledgedKeys.has(pendingProgressKey(record)));
+  if (remainingRecords.length === progressRecords.length) return state;
+  if (remainingRecords.length > 0) return { ...state, [field]: remainingRecords };
+  const { [field]: removedRecords, ...stateWithoutRecords } = state;
+  return stateWithoutRecords;
+}
+
 function normaliseProgressSnapshot(value) {
   if (!isRecord(value) || !Array.isArray(value.topics) || !Array.isArray(value.quizAttempts) || !Array.isArray(value.missions)) {
     return null;
   }
   const topics = value.topics.flatMap((topic) => (
     isRecord(topic)
+    && typeof topic.topicId === "string"
     && TOPIC_ID_PATTERN.test(topic.topicId)
     && ["explored", "completed"].includes(topic.status)
       ? [{ topicId: topic.topicId, status: topic.status }]
@@ -181,7 +194,10 @@ function normaliseProgressSnapshot(value) {
   ));
   const missions = value.missions.flatMap((mission) => {
     const missionState = normaliseMissionState(mission);
-    return isRecord(mission) && MISSION_ID_PATTERN.test(mission.missionId) && missionState
+    return isRecord(mission)
+      && typeof mission.missionId === "string"
+      && MISSION_ID_PATTERN.test(mission.missionId)
+      && missionState
       ? [{ missionId: mission.missionId, ...missionState }]
       : [];
   });
@@ -191,11 +207,11 @@ function normaliseProgressSnapshot(value) {
 function hydrateServerProgress(state, snapshot) {
   const normalisedSnapshot = normaliseProgressSnapshot(snapshot);
   if (normalisedSnapshot === null) return state;
-  const pendingRecords = normalisePendingProgress(state.pendingProgress);
-  const pendingQuizLessons = new Set(pendingRecords.flatMap((record) => (
+  const protectedRecords = normalisePendingProgress(state.pendingProgress);
+  const pendingQuizLessons = new Set(protectedRecords.flatMap((record) => (
     record.kind === "quizAttempt" ? [record.payload.lessonId] : []
   )));
-  const pendingMissionIds = new Set(pendingRecords.flatMap((record) => (
+  const pendingMissionIds = new Set(protectedRecords.flatMap((record) => (
     record.kind === "missionProgress" ? [record.payload.missionId] : []
   )));
   const serverQuizAttempts = Object.fromEntries(normalisedSnapshot.quizAttempts.map((attempt) => [
@@ -228,15 +244,7 @@ function hydrateServerProgress(state, snapshot) {
 }
 
 function ackPendingProgress(state, keys) {
-  if (!Array.isArray(keys)) return state;
-  const acknowledgedKeys = new Set(keys.filter((key) => typeof key === "string"));
-  if (acknowledgedKeys.size === 0) return state;
-  const pendingRecords = state.pendingProgress ?? [];
-  const remainingRecords = pendingRecords.filter((record) => !acknowledgedKeys.has(pendingProgressKey(record)));
-  if (remainingRecords.length === pendingRecords.length) return state;
-  if (remainingRecords.length > 0) return { ...state, pendingProgress: remainingRecords };
-  const { pendingProgress, ...stateWithoutPendingProgress } = state;
-  return stateWithoutPendingProgress;
+  return acknowledgeProgressRecords(state, "pendingProgress", keys);
 }
 
 export function normaliseLearningState(value) {
@@ -319,7 +327,7 @@ function reduce(state, action) {
     }
     case "saveMission": {
       const missionState = normaliseMissionState(action.missionState);
-      if (!MISSION_ID_PATTERN.test(action.missionId) || missionState === null) return state;
+      if (typeof action.missionId !== "string" || !MISSION_ID_PATTERN.test(action.missionId) || missionState === null) return state;
       return {
         ...state,
         missionStates: { ...state.missionStates, [action.missionId]: missionState },

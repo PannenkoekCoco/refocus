@@ -28,7 +28,7 @@ test("a learner can pin RAG, complete an API quiz, and retain progress", async (
   await expect(page.getByText("Quiz complete: 3/3.")).toBeVisible();
 });
 
-test("topic exploration syncs and quiz results wait for the attempted progress save", async ({ page }) => {
+test("topic exploration syncs and quiz results render from durable local state while replay is pending", async ({ page }) => {
   const progressRequests = [];
   let releaseQuizSave;
   const quizSaveCanFinish = new Promise((resolve) => {
@@ -73,14 +73,19 @@ test("topic exploration syncs and quiz results wait for the attempted progress s
   }
 
   await page.getByRole("button", { name: "See results" }).click();
-  await expect(page.getByRole("heading", { name: "Quiz complete: 3/3." })).not.toBeVisible();
-  expect(progressRequests).toEqual(["PUT", "POST"]);
+  await expect(page.getByRole("heading", { name: "Quiz complete: 3/3." })).toBeVisible();
+  await expect.poll(() => progressRequests).toEqual(["PUT", "POST"]);
+  await expect.poll(async () => page.evaluate(() => JSON.parse(
+    localStorage.getItem("engineeringLearningRoute.v1"),
+  ).pendingProgress?.some((record) => record.kind === "quizAttempt"))).toBe(true);
 
   releaseQuizSave();
-  await expect(page.getByRole("heading", { name: "Quiz complete: 3/3." })).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => (
+    JSON.parse(localStorage.getItem("engineeringLearningRoute.v1")).pendingProgress?.length ?? 0
+  ))).toBe(0);
 });
 
-test("the live quiz renders its refreshed local recommendation only after progress persistence settles", async ({ page }) => {
+test("the live quiz renders its local recommendation while durable replay is pending", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("engineeringLearningRoute.v1", JSON.stringify({
       quizAttempts: {
@@ -131,11 +136,17 @@ test("the live quiz renders its refreshed local recommendation only after progre
   }
 
   await page.getByRole("button", { name: "See results" }).click();
-  await expect(page.getByText("Suggested next: Structured outputs and tool calling")).not.toBeVisible();
+  await expect(page.getByText("Suggested next: Structured outputs and tool calling")).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(
+    localStorage.getItem("engineeringLearningRoute.v1"),
+  ).pendingProgress?.some((record) => record.kind === "quizAttempt"))).toBe(true);
 
   releaseQuizSave();
   await expect(page.getByRole("heading", { name: "Quiz complete: 3/3." })).toBeVisible();
   await expect(page.getByText("Suggested next: Structured outputs and tool calling")).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => (
+    JSON.parse(localStorage.getItem("engineeringLearningRoute.v1")).pendingProgress?.length ?? 0
+  ))).toBe(0);
 });
 
 test("pinning keeps focus on the replacement pin control", async ({ page }) => {

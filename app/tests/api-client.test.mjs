@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  PENDING_PROGRESS_MESSAGE,
   createFocusLensClient,
   createGitHubMissionClient,
   createProgressClient,
@@ -50,31 +49,42 @@ const missionState = {
   status: "self_reviewed",
 };
 
-test("a failed progress save keeps a narrow pending record and exposes the sync message", async () => {
+test("a durable progress save queues a narrow record before sync transport runs", async () => {
   const storage = createStorage({ pinnedTopicId: "apis" });
   const messages = [];
+  const queued = [];
+  let fetchCalls = 0;
   const { queuePendingProgress } = createStateBackedQueue(storage);
   const client = createProgressClient({
-    fetchImpl: async () => { throw new TypeError("offline"); },
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      throw new Error("Direct saves must not send progress themselves.");
+    },
     queuePendingProgress,
     onPending: (message) => messages.push(message),
+    onQueued: (record) => queued.push(record),
   });
 
   const result = await client.saveQuizAttempt(attempt);
   const persisted = JSON.parse(storage.getItem(LEARNING_ROUTE_STORAGE_KEY));
 
   assert.equal(result, null);
-  assert.deepEqual(messages, [PENDING_PROGRESS_MESSAGE]);
-  assert.equal(PENDING_PROGRESS_MESSAGE, "Saved locally; sign in or retry to sync.");
+  assert.deepEqual(messages, []);
+  assert.deepEqual(queued, [{ kind: "quizAttempt", payload: attempt }]);
+  assert.equal(fetchCalls, 0);
   assert.deepEqual(persisted.pendingProgress, [{ kind: "quizAttempt", payload: attempt }]);
   assert.equal("session" in persisted, false);
 });
 
-test("a queued offline save survives a later ordinary learning-state update", async () => {
+test("a queued durable save survives a later ordinary learning-state update without fetching", async () => {
   const storage = createStorage({ pinnedTopicId: "apis" });
   const { store, queuePendingProgress } = createStateBackedQueue(storage);
+  let fetchCalls = 0;
   const client = createProgressClient({
-    fetchImpl: async () => { throw new TypeError("offline"); },
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      throw new Error("Direct saves must not fetch.");
+    },
     queuePendingProgress,
   });
 
@@ -84,9 +94,10 @@ test("a queued offline save survives a later ordinary learning-state update", as
   const persisted = JSON.parse(storage.getItem(LEARNING_ROUTE_STORAGE_KEY));
   assert.deepEqual(persisted.pendingProgress, [{ kind: "quizAttempt", payload: attempt }]);
   assert.equal(persisted.pinnedTopicId, "sql");
+  assert.equal(fetchCalls, 0);
 });
 
-test("a failed progress save does not claim a local sync record when storage rejects it", async () => {
+test("a durable progress save does not claim a local sync record when storage rejects it", async () => {
   const messages = [];
   const storage = {
     getItem: () => null,
@@ -94,7 +105,7 @@ test("a failed progress save does not claim a local sync record when storage rej
   };
   const { queuePendingProgress } = createStateBackedQueue(storage);
   const client = createProgressClient({
-    fetchImpl: async () => { throw new TypeError("offline"); },
+    fetchImpl: async () => { throw new Error("Direct saves must not fetch."); },
     queuePendingProgress,
     onPending: (message) => messages.push(message),
   });
@@ -107,17 +118,18 @@ test("a failed progress save does not claim a local sync record when storage rej
   ]);
 });
 
-test("a quiz attempt is saved before a caller refreshes recommendations", async () => {
+test("a quiz attempt is durably queued before a caller refreshes recommendations", async () => {
   const events = [];
   const client = createProgressClient({
     fetchImpl: async (url, options) => {
       events.push([url, options]);
-      return {
-        ok: true,
-        json: async () => ({ id: attempt.attemptId, lessonId: attempt.lessonId, answers: attempt.answers }),
-      };
+      throw new Error("Recommendation refresh must not trigger a direct progress write.");
     },
-    storage: createStorage(),
+    queuePendingProgress: (record) => {
+      events.push(["queue", record]);
+      return true;
+    },
+    onQueued: (record) => events.push(["queued", record]),
   });
 
   const result = await client.saveQuizAttemptAndRefresh(attempt, async () => {
@@ -125,21 +137,25 @@ test("a quiz attempt is saved before a caller refreshes recommendations", async 
     return { topicId: "sql" };
   });
 
-  assert.equal(events[0][0], "/api/progress/quiz-attempts");
-  assert.equal(events[0][1].credentials, "same-origin");
-  assert.equal(events[1][0], "refresh");
+  assert.equal(events[0][0], "queue");
+  assert.equal(events[1][0], "queued");
+  assert.equal(events[2][0], "refresh");
+  assert.equal(events[0][1].kind, "quizAttempt");
+  assert.equal(events[0][1].payload.attemptId, attempt.attemptId);
+  assert.equal(result.attempt, null);
   assert.deepEqual(result.recommendation, { topicId: "sql" });
 });
 
-test("a failed quiz save records local pending progress before refreshing recommendations", async () => {
+test("a queued quiz save records local pending progress before refreshing recommendations", async () => {
   const storage = createStorage();
   const { queuePendingProgress } = createStateBackedQueue(storage);
-  let rejectSave;
+  let fetchCalls = 0;
   let refreshCalls = 0;
   const client = createProgressClient({
-    fetchImpl: () => new Promise((resolve, reject) => {
-      rejectSave = reject;
-    }),
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      throw new Error("Direct saves must not fetch.");
+    },
     queuePendingProgress,
   });
 
@@ -150,13 +166,10 @@ test("a failed quiz save records local pending progress before refreshing recomm
     return { topicId: "sql" };
   });
 
-  await Promise.resolve();
-  assert.equal(refreshCalls, 0);
-
-  rejectSave(new TypeError("offline"));
   const result = await completion;
 
   assert.equal(refreshCalls, 1);
+  assert.equal(fetchCalls, 0);
   assert.equal(result.attempt, null);
   assert.deepEqual(result.recommendation, { topicId: "sql" });
 });
@@ -172,6 +185,196 @@ test("a progress snapshot falls back to null for an anonymous response", async (
 
   assert.equal(await client.loadSnapshot(), null);
   assert.deepEqual(requests, [["/api/progress", { credentials: "same-origin" }]]);
+});
+
+test("a progress snapshot rejects numeric topic and mission identifiers", async () => {
+  const snapshots = [{
+    topics: [{
+      id: "00000000-0000-0000-0000-000000000001",
+      topicId: 42,
+      status: "explored",
+      updatedAt: "2026-07-17T00:00:00Z",
+    }],
+    quizAttempts: [],
+    missions: [],
+  }, {
+    topics: [],
+    quizAttempts: [],
+    missions: [{
+      id: "00000000-0000-0000-0000-000000000002",
+      missionId: 42,
+      ...missionState,
+      updatedAt: "2026-07-17T00:00:00Z",
+    }],
+  }];
+  const client = createProgressClient({
+    fetchImpl: async () => ({ ok: true, json: async () => snapshots.shift() }),
+  });
+
+  assert.equal(await client.loadSnapshot(), null);
+  assert.equal(await client.loadSnapshot(), null);
+});
+
+test("progress saves reject numeric identifiers before they enter the durable outbox", async () => {
+  const queued = [];
+  let fetchCalls = 0;
+  const client = createProgressClient({
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      throw new Error("Direct saves must not fetch.");
+    },
+    queuePendingProgress: (record) => {
+      queued.push(record);
+      return true;
+    },
+  });
+
+  assert.equal(await client.saveTopicProgress(42, "explored"), null);
+  assert.equal(await client.saveMissionProgress(42, missionState), null);
+  assert.deepEqual(queued, []);
+  assert.equal(fetchCalls, 0);
+});
+
+test("a direct mission save survives a stale snapshot through the durable outbox", async () => {
+  const localMissionState = {
+    approach: "guided",
+    reflection: "Keep this direct local reflection.",
+    status: "self_reviewed",
+  };
+  const directRecord = {
+    kind: "missionProgress",
+    payload: { missionId: "api-service-v1", ...localMissionState },
+  };
+  const storage = createStorage();
+  const { store, queuePendingProgress } = createStateBackedQueue(storage);
+  let resolveSnapshot;
+  let writes = 0;
+  const client = createProgressClient({
+    fetchImpl: (url) => {
+      if (url === "/api/progress") {
+        return new Promise((resolve) => {
+          resolveSnapshot = resolve;
+        });
+      }
+      if (url === "/api/progress/missions/api-service-v1") {
+        writes += 1;
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    },
+    queuePendingProgress,
+  });
+
+  const delayedSnapshot = client.loadSnapshot();
+  store.dispatch({
+    type: "saveMission",
+    missionId: directRecord.payload.missionId,
+    missionState: localMissionState,
+  });
+  await client.saveMissionProgress(directRecord.payload.missionId, localMissionState);
+
+  resolveSnapshot({
+    ok: true,
+    json: async () => ({
+      topics: [],
+      quizAttempts: [],
+      missions: [{
+        id: "00000000-0000-0000-0000-000000000003",
+        missionId: "api-service-v1",
+        approach: "byop",
+        reflection: "This stale server value must not win.",
+        status: "self_reviewed",
+        updatedAt: "2026-07-17T00:00:00Z",
+      }],
+    }),
+  });
+  store.dispatch({ type: "hydrateServerProgress", snapshot: await delayedSnapshot });
+
+  assert.deepEqual(store.getState().missionStates["api-service-v1"], localMissionState);
+  assert.deepEqual(store.getState().pendingProgress, [directRecord]);
+  assert.equal(writes, 0);
+  store.dispatch({
+    type: "ackPendingProgress",
+    keys: [pendingProgressKey({
+      kind: "missionProgress",
+      payload: { ...directRecord.payload, reflection: "A newer reflection." },
+    })],
+  });
+  assert.deepEqual(store.getState().pendingProgress, [directRecord]);
+
+  const acknowledged = await client.replayPendingProgress(store.getState().pendingProgress);
+  assert.deepEqual(acknowledged, [pendingProgressKey(directRecord)]);
+  assert.equal(writes, 1);
+  store.dispatch({ type: "ackPendingProgress", keys: acknowledged });
+
+  assert.equal("pendingProgress" in store.getState(), false);
+});
+
+test("a failed durable-outbox replay retains local mission work after a stale snapshot", async () => {
+  const localMissionState = {
+    approach: "guided",
+    reflection: "Keep this local reflection until the replay succeeds.",
+    status: "self_reviewed",
+  };
+  const directRecord = {
+    kind: "missionProgress",
+    payload: { missionId: "api-service-v1", ...localMissionState },
+  };
+  const storage = createStorage();
+  const { store, queuePendingProgress } = createStateBackedQueue(storage);
+  let resolveSnapshot;
+  let writes = 0;
+  const client = createProgressClient({
+    fetchImpl: (url) => {
+      if (url === "/api/progress") {
+        return new Promise((resolve) => {
+          resolveSnapshot = resolve;
+        });
+      }
+      if (url === "/api/progress/missions/api-service-v1") {
+        writes += 1;
+        return Promise.resolve({ ok: false, status: 503, json: async () => ({}) });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    },
+    queuePendingProgress,
+  });
+
+  const delayedSnapshot = client.loadSnapshot();
+  store.dispatch({
+    type: "saveMission",
+    missionId: directRecord.payload.missionId,
+    missionState: localMissionState,
+  });
+  await client.saveMissionProgress(directRecord.payload.missionId, localMissionState);
+
+  resolveSnapshot({
+    ok: true,
+    json: async () => ({
+      topics: [],
+      quizAttempts: [],
+      missions: [{
+        id: "00000000-0000-0000-0000-000000000004",
+        missionId: "api-service-v1",
+        approach: "byop",
+        reflection: "This stale server value must not win either.",
+        status: "self_reviewed",
+        updatedAt: "2026-07-17T00:00:00Z",
+      }],
+    }),
+  });
+  store.dispatch({ type: "hydrateServerProgress", snapshot: await delayedSnapshot });
+
+  assert.deepEqual(store.getState().missionStates["api-service-v1"], localMissionState);
+  assert.deepEqual(store.getState().pendingProgress, [directRecord]);
+  assert.equal(writes, 0);
+
+  const acknowledged = await client.replayPendingProgress(store.getState().pendingProgress);
+
+  assert.deepEqual(acknowledged, []);
+  assert.equal(writes, 1);
+  assert.deepEqual(store.getState().pendingProgress, [directRecord]);
+  assert.deepEqual(store.getState().missionStates["api-service-v1"], localMissionState);
 });
 
 test("a pending replay acknowledges only the progress records whose writes succeed", async () => {
@@ -214,12 +417,16 @@ test("a pending replay acknowledges only the progress records whose writes succe
   ]);
 });
 
-test("a failed mission self-review save is queued for the same safe progress client", async () => {
+test("a mission self-review is durably queued before sync transport runs", async () => {
   const storage = createStorage();
   const { queuePendingProgress } = createStateBackedQueue(storage);
   const messages = [];
+  let fetchCalls = 0;
   const client = createProgressClient({
-    fetchImpl: async () => { throw new TypeError("offline"); },
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      throw new Error("Direct saves must not fetch.");
+    },
     queuePendingProgress,
     onPending: (message) => messages.push(message),
   });
@@ -227,26 +434,38 @@ test("a failed mission self-review save is queued for the same safe progress cli
   const result = await client.saveMissionProgress("api-service-v1", missionState);
 
   assert.equal(result, null);
-  assert.deepEqual(messages, [PENDING_PROGRESS_MESSAGE]);
+  assert.deepEqual(messages, []);
+  assert.equal(fetchCalls, 0);
   assert.deepEqual(JSON.parse(storage.getItem(LEARNING_ROUTE_STORAGE_KEY)).pendingProgress, [{
     kind: "missionProgress",
     payload: { missionId: "api-service-v1", ...missionState },
   }]);
 });
 
-test("a mission self-review keeps the explicit mission ID as its write authority", async () => {
+test("a mission self-review keeps the explicit mission ID as its queued write authority", async () => {
   const requests = [];
+  const storage = createStorage();
+  const { store, queuePendingProgress } = createStateBackedQueue(storage);
   const client = createProgressClient({
     fetchImpl: async (url, options) => {
       requests.push([url, options]);
-      return { ok: true, status: 200, json: async () => ({}) };
+        return { ok: true, status: 200, json: async () => ({}) };
     },
+    queuePendingProgress,
   });
 
   await client.saveMissionProgress("api-service-v1", {
     ...missionState,
     missionId: "python-tool-v1",
   });
+
+  assert.deepEqual(store.getState().pendingProgress, [{
+    kind: "missionProgress",
+    payload: { missionId: "api-service-v1", ...missionState },
+  }]);
+  assert.deepEqual(requests, []);
+
+  await client.replayPendingProgress(store.getState().pendingProgress);
 
   assert.deepEqual(requests, [["/api/progress/missions/api-service-v1", {
     method: "PUT",
