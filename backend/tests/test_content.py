@@ -89,6 +89,22 @@ def test_starter_topic_schema_rejects_a_missing_starter_action() -> None:
         Topic.model_validate(starter_topic)
 
 
+@pytest.mark.parametrize("field", ("id", "title", "description", "speechText"))
+def test_starter_action_schema_rejects_whitespace_only_required_text(field: str) -> None:
+    starter_topic = next(
+        topic
+        for topic in ContentRepository(CONTENT_ROOT).topics()
+        if topic["id"] == "docker"
+    )
+    starter_topic = dict(starter_topic)
+    starter_action = dict(starter_topic["starterAction"])
+    starter_action[field] = " \t "
+    starter_topic["starterAction"] = starter_action
+
+    with pytest.raises(ValidationError, match=field):
+        Topic.model_validate(starter_topic)
+
+
 def test_repository_reads_each_full_lesson_pack() -> None:
     repository = ContentRepository(CONTENT_ROOT)
 

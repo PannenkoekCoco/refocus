@@ -65,6 +65,26 @@ test("the GitHub response safety check leaves ordinary lesson content alone", ()
   }))).toBe(false);
 });
 
+test("a mismatched static mission contract does not load into the learning route", async ({ page }) => {
+  await mockInitialBrowserApis(page);
+  await page.route("**/content/missions/foundation-missions.json", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        version: 2,
+        missions: [{ id: "unverifiable-mission", topicId: "apis" }],
+      }),
+    });
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", {
+    name: "Your learning route could not load offline.",
+  })).toBeVisible();
+});
+
 async function mockInitialBrowserApis(page, { connection = emptyGitHubConnection } = {}) {
   await page.route("**/api/focus-lenses", async (route) => {
     await route.fulfill({

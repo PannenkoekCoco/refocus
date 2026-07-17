@@ -42,7 +42,10 @@ async function loadMissions(fetchImpl) {
   const response = await fetchImpl(new URL("../../../content/missions/foundation-missions.json", import.meta.url));
   if (!response.ok) throw new Error("Could not load missions.");
   const payload = await response.json();
-  return Array.isArray(payload.missions) ? payload.missions : [];
+  if (!payload || typeof payload !== "object" || payload.version !== 1 || !Array.isArray(payload.missions)) {
+    throw new Error("Could not load a versioned mission contract.");
+  }
+  return payload.missions;
 }
 
 function masteryFromAttempts(quizAttempts) {

@@ -20,6 +20,13 @@ class StarterAction(ContentModel):
     description: str
     speechText: str
 
+    @field_validator("id", "title", "description", "speechText")
+    @classmethod
+    def required_text_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("starter action text must not be blank")
+        return value
+
 
 class Topic(ContentModel):
     id: str
