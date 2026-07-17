@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
@@ -23,6 +24,35 @@ from app.services.github_client import (
     InstallationSnapshot,
     RepositorySnapshot,
 )
+
+
+SENSITIVE_GITHUB_RESPONSE_FIELD_NAMES = frozenset({
+    "access_token",
+    "refresh_token",
+    "token",
+    "github_token",
+    "installation_token",
+    "oauth_token",
+    "user_token",
+    "bearer_token",
+    "code",
+    "state",
+    "code_verifier",
+    "verifier",
+})
+
+
+def browser_response_contains_sensitive_github_field(payload: object) -> bool:
+    if isinstance(payload, list):
+        return any(browser_response_contains_sensitive_github_field(item) for item in payload)
+    if not isinstance(payload, dict):
+        return False
+    return any(
+        re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", field_name).replace("-", "_").lower()
+        in SENSITIVE_GITHUB_RESPONSE_FIELD_NAMES
+        or browser_response_contains_sensitive_github_field(value)
+        for field_name, value in payload.items()
+    )
 
 
 class FakeRepositoryEvidence:
@@ -706,6 +736,25 @@ async def test_github_connection_snapshot_and_repository_selection_are_user_owne
     assert refreshed.json()["installations"][0]["repositories"][0]["selected"] is True
     assert outsider_snapshot.json() == {"connected": False, "installations": []}
     assert outsider_select.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_browser_visible_github_api_responses_exclude_oauth_secret_fields(
+    configured_github_client,
+) -> None:
+    client, app = configured_github_client
+    await connect_github(client, app, FakeGitHub())
+
+    responses = [
+        await client.get("/api/me"),
+        await client.get("/api/github/installations"),
+        await client.put("/api/github/repositories/42"),
+        await client.post("/api/missions/api-service-v1/verify", json={}),
+    ]
+
+    assert [response.status_code for response in responses] == [200, 200, 200, 200]
+    for response in responses:
+        assert not browser_response_contains_sensitive_github_field(response.json())
 
 
 @pytest.mark.asyncio

@@ -1,10 +1,69 @@
 import { expect, test } from "@playwright/test";
 
-const GITHUB_TOKEN_FIELD = /(?:access[_-]?token|refresh[_-]?token|token)\s*[:=]/i;
+const GITHUB_SENSITIVE_RESPONSE_FIELDS = new Set([
+  "access_token",
+  "refresh_token",
+  "token",
+  "github_token",
+  "installation_token",
+  "oauth_token",
+  "user_token",
+  "bearer_token",
+  "code",
+  "state",
+  "code_verifier",
+  "verifier",
+]);
+
+function normalizeGitHubFieldName(fieldName) {
+  return fieldName
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replaceAll("-", "_")
+    .toLowerCase();
+}
+
+function hasSensitiveGitHubResponseField(value) {
+  if (Array.isArray(value)) return value.some(hasSensitiveGitHubResponseField);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(([fieldName, nestedValue]) => (
+    GITHUB_SENSITIVE_RESPONSE_FIELDS.has(normalizeGitHubFieldName(fieldName))
+    || hasSensitiveGitHubResponseField(nestedValue)
+  ));
+}
+
+function jsonBodyHasSensitiveGitHubResponseField(body) {
+  if (typeof body !== "string" || body.length === 0) return false;
+  return hasSensitiveGitHubResponseField(JSON.parse(body));
+}
+
+function urlHasSensitiveGitHubResponseField(url) {
+  return [...new URL(url).searchParams.keys()].some((fieldName) => (
+    GITHUB_SENSITIVE_RESPONSE_FIELDS.has(normalizeGitHubFieldName(fieldName))
+  ));
+}
 
 function emptyGitHubConnection() {
   return { connected: false, installations: [] };
 }
+
+test("the GitHub response safety check rejects a JSON access token", () => {
+  expect(jsonBodyHasSensitiveGitHubResponseField(JSON.stringify({ access_token: "secret" }))).toBe(true);
+});
+
+test("the GitHub response safety check rejects nested secret field keys", () => {
+  for (const fieldName of ["token", "code", "state", "codeVerifier"]) {
+    expect(jsonBodyHasSensitiveGitHubResponseField(JSON.stringify({
+      authorization: { [fieldName]: "secret" },
+    }))).toBe(true);
+  }
+});
+
+test("the GitHub response safety check leaves ordinary lesson content alone", () => {
+  expect(jsonBodyHasSensitiveGitHubResponseField(JSON.stringify({
+    title: "Protect an access token in an API client",
+    lesson: { summary: "Learn why a token should not be logged." },
+  }))).toBe(false);
+});
 
 async function mockInitialBrowserApis(page, { connection = emptyGitHubConnection } = {}) {
   await page.route("**/api/focus-lenses", async (route) => {
@@ -217,11 +276,11 @@ test("the API mission journey selects an authorized repository, explains missing
   expect(githubRequests.length).toBeGreaterThanOrEqual(3);
   for (const request of githubRequests) {
     expect(Object.keys(request.headers)).not.toContain("authorization");
-    expect(request.url).not.toMatch(GITHUB_TOKEN_FIELD);
-    expect(request.postData).not.toMatch(GITHUB_TOKEN_FIELD);
+    expect(urlHasSensitiveGitHubResponseField(request.url)).toBe(false);
+    expect(jsonBodyHasSensitiveGitHubResponseField(request.postData)).toBe(false);
   }
   for (const response of githubResponses) {
-    expect(await response.text()).not.toMatch(GITHUB_TOKEN_FIELD);
+    expect(jsonBodyHasSensitiveGitHubResponseField(await response.text())).toBe(false);
   }
 });
 
