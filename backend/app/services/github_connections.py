@@ -40,6 +40,9 @@ class OAuthTransactionLimitError(Exception):
     """The bounded OAuth transaction store is temporarily full."""
 
 
+OAUTH_TRANSACTION_CLAIM_RETRY_BUDGET = 3
+
+
 def new_oauth_transaction_secrets() -> OAuthTransactionSecrets:
     state = secrets.token_urlsafe(32)
     code_verifier = secrets.token_urlsafe(64)
@@ -121,7 +124,10 @@ async def create_oauth_transaction(
     )
     database.add(transaction)
     await database.flush()
-    for _ in range(max_pending_transactions):
+    # The slot update is atomic. Retrying only absorbs a small number of concurrent
+    # claim races; scanning every configured slot turns a full public endpoint into
+    # thousands of failed database writes.
+    for _ in range(min(max_pending_transactions, OAUTH_TRANSACTION_CLAIM_RETRY_BUDGET)):
         if await _claim_oauth_transaction_slot(
             database,
             transaction_id=transaction.id,

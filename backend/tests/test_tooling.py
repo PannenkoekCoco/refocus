@@ -74,3 +74,4 @@ def test_environment_example_documents_safe_session_cookie_defaults() -> None:
 
     assert "APP_ENVIRONMENT=development" in text
     assert "SESSION_COOKIE_SECURE=" in text
+    assert "LOCAL_TTS_ORIGIN" not in text

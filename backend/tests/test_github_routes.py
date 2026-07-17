@@ -10,6 +10,7 @@ from sqlalchemy import func, select, update
 import app.services.github_client as github_client_module
 from app.models import (
     GitHubOAuthTransaction,
+    GitHubOAuthTransactionSlot,
     GitHubRepository,
     MissionVerification,
     Session,
@@ -17,7 +18,11 @@ from app.models import (
     User,
 )
 from app.security.sessions import new_session_token
-from app.services.github_connections import OAuthTransactionLimitError, create_oauth_transaction
+from app.services.github_connections import (
+    OAUTH_TRANSACTION_CLAIM_RETRY_BUDGET,
+    OAuthTransactionLimitError,
+    create_oauth_transaction,
+)
 from app.services.github_client import (
     AuthorizationSnapshot,
     GitHubProviderUnavailableError,
@@ -176,6 +181,26 @@ class CountBarrierSession:
             await self._database.rollback()
             await self._barrier.wait()
         return result
+
+    def __getattr__(self, name: str):
+        return getattr(self._database, name)
+
+
+class ClaimCountingSession:
+    """Count only the atomic slot-claim UPDATEs made by a real database session."""
+
+    def __init__(self, database) -> None:
+        self._database = database
+        self.claim_updates = 0
+
+    async def execute(self, statement, *args, **kwargs):
+        rendered_statement = str(statement)
+        if (
+            rendered_statement.startswith("UPDATE github_oauth_transaction_slots")
+            and "slot_number =" in rendered_statement
+        ):
+            self.claim_updates += 1
+        return await self._database.execute(statement, *args, **kwargs)
 
     def __getattr__(self, name: str):
         return getattr(self._database, name)
@@ -577,6 +602,43 @@ async def test_oauth_capacity_claim_remains_atomic_when_legacy_count_reads_inter
             await database.execute(select(func.count(GitHubOAuthTransaction.id)))
         ).scalar_one()
     assert transaction_count == 1
+
+
+@pytest.mark.asyncio
+async def test_saturated_oauth_capacity_uses_a_small_fixed_claim_retry_budget(
+    configured_github_client,
+) -> None:
+    _client, app = configured_github_client
+    async with app.state.session_factory() as database:
+        occupied_transactions = [
+            GitHubOAuthTransaction(
+                state_hash=f"occupied-state-{slot_number}",
+                expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            )
+            for slot_number in range(1, 11)
+        ]
+        database.add_all(occupied_transactions)
+        await database.flush()
+        for slot_number, transaction in enumerate(occupied_transactions, start=1):
+            await database.execute(
+                update(GitHubOAuthTransactionSlot)
+                .where(GitHubOAuthTransactionSlot.slot_number == slot_number)
+                .values(transaction_id=transaction.id)
+            )
+        await database.commit()
+
+        counting_database = ClaimCountingSession(database)
+        with pytest.raises(OAuthTransactionLimitError):
+            await create_oauth_transaction(
+                counting_database,
+                state="saturated-state",
+                max_age_seconds=60,
+                user_id=None,
+                previous_state=None,
+                max_pending_transactions=10,
+            )
+
+    assert counting_database.claim_updates == OAUTH_TRANSACTION_CLAIM_RETRY_BUDGET
 
 
 @pytest.mark.asyncio

@@ -15,12 +15,14 @@ const LESSON_TOPIC_IDS = new Set([
 ]);
 const STARTER_ACTION_FIELDS = ["id", "title", "description", "speechText"];
 
+function hasVisibleAuthoredText(value) {
+  return typeof value === "string" && /[^\s\p{C}]/u.test(value);
+}
+
 function isAuthoredStarterAction(starterAction) {
   return starterAction
     && typeof starterAction === "object"
-    && STARTER_ACTION_FIELDS.every((field) => (
-      typeof starterAction[field] === "string" && starterAction[field].trim()
-    ));
+    && STARTER_ACTION_FIELDS.every((field) => hasVisibleAuthoredText(starterAction[field]));
 }
 
 export function validateTopics(topics) {

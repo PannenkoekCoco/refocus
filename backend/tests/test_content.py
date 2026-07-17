@@ -105,6 +105,22 @@ def test_starter_action_schema_rejects_whitespace_only_required_text(field: str)
         Topic.model_validate(starter_topic)
 
 
+@pytest.mark.parametrize("non_visible_text", ("\ufeff", "\x1c"), ids=("bom", "control"))
+def test_starter_action_schema_rejects_non_visible_required_text(non_visible_text: str) -> None:
+    starter_topic = next(
+        topic
+        for topic in ContentRepository(CONTENT_ROOT).topics()
+        if topic["id"] == "docker"
+    )
+    starter_topic = dict(starter_topic)
+    starter_action = dict(starter_topic["starterAction"])
+    starter_action["title"] = non_visible_text
+    starter_topic["starterAction"] = starter_action
+
+    with pytest.raises(ValidationError, match="title"):
+        Topic.model_validate(starter_topic)
+
+
 def test_repository_reads_each_full_lesson_pack() -> None:
     repository = ContentRepository(CONTENT_ROOT)
 

@@ -1,6 +1,7 @@
 from datetime import datetime
 from math import isfinite
 from typing import Literal
+from unicodedata import category
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -8,6 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 class ContentModel(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
+def has_visible_authored_text(value: str) -> bool:
+    """Require authored text to contain a visible, non-control character."""
+    return any(
+        not character.isspace() and not category(character).startswith("C")
+        for character in value
+    )
 
 
 class HealthResponse(ContentModel):
@@ -23,7 +32,7 @@ class StarterAction(ContentModel):
     @field_validator("id", "title", "description", "speechText")
     @classmethod
     def required_text_must_not_be_blank(cls, value: str) -> str:
-        if not value.strip():
+        if not has_visible_authored_text(value):
             raise ValueError("starter action text must not be blank")
         return value
 
@@ -233,7 +242,7 @@ class FocusLensTextInput(FocusLensModel):
     @field_validator("original_text")
     @classmethod
     def original_text_must_not_be_blank(cls, value: str) -> str:
-        if not value.strip():
+        if not has_visible_authored_text(value):
             raise ValueError("originalText must not be blank")
         return value
 
@@ -272,7 +281,7 @@ class FocusLensPatch(FocusLensModel):
     @field_validator("original_text")
     @classmethod
     def patch_text_must_not_be_blank(cls, value: str | None) -> str | None:
-        if value is not None and not value.strip():
+        if value is not None and not has_visible_authored_text(value):
             raise ValueError("originalText must not be blank")
         return value
 

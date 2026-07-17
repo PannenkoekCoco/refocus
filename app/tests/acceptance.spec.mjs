@@ -273,6 +273,39 @@ test("narration coverage speaks route guidance, practical actions, mission evide
   );
 });
 
+test("quiz feedback and results have explicit browser-fallback narration", async ({ page }) => {
+  await installBrowserSpeechFallback(page);
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+
+  await openRouteTopic(page, "apis", "Open APIs");
+  await page.getByRole("button", { name: "Start quiz" }).click();
+  await page.getByRole("button", { name: /^A\./ }).click();
+  const feedback = page.locator(".quiz-feedback");
+  await feedback.getByRole("button", { name: "Listen" }).click();
+  await expect.poll(async () => page.evaluate(() => (
+    window.__refocusSpokenText.some((text) => (
+      text.startsWith("Not quite. Correct answer:") && text.includes("Invalid request data")
+    ))
+  ))).toBe(true);
+
+  await page.getByRole("button", { name: "Next question" }).click();
+  await page.getByRole("button", { name: /^B\./ }).click();
+  await page.getByRole("button", { name: "Next question" }).click();
+  await page.getByRole("button", { name: /^B\./ }).click();
+  await page.getByRole("button", { name: "See results" }).click();
+  await page.locator(".quiz-card > .narrator").getByRole("button", { name: "Listen" }).click();
+  await expect.poll(async () => page.evaluate(() => (
+    window.__refocusSpokenText.some((text) => (
+      text.includes("Quiz complete: 2/3.")
+      && text.includes("Quiz saved locally")
+      && text.includes("Suggested next:")
+      && text.includes("Choose a practical mission")
+      && text.includes("Ship a small API service")
+    ))
+  ))).toBe(true);
+});
+
 test("status narration leaves pin feedback visible when no provider is available", async ({ page }) => {
   await installUnavailableSpeech(page);
   await mockInitialBrowserApis(page);

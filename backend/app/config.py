@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
@@ -8,6 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://learning:learning_local_only@127.0.0.1:5432/learning_companion"
 DEFAULT_APP_ORIGIN = "http://127.0.0.1:8000"
+APPLICATION_ROOT = Path(__file__).resolve().parents[2]
+APPLICATION_ENV_FILE = APPLICATION_ROOT / ".env"
 MINIMUM_PRODUCTION_SESSION_SECRET_LENGTH = 32
 KNOWN_NON_PRODUCTION_SESSION_SECRETS = frozenset(
     {
@@ -49,10 +52,10 @@ class Settings(BaseSettings):
     github_callback_timeout_seconds: int = Field(default=15, ge=5, le=60)
     github_verification_timeout_seconds: int = Field(default=15, ge=5, le=60)
     github_verification_min_interval_seconds: int = Field(default=60, ge=1, le=60 * 60)
-    content_root: Path = Path(__file__).parents[2] / "content"
-    static_root: Path = Path(__file__).parents[2] / "app" / "static"
+    content_root: Path = APPLICATION_ROOT / "content"
+    static_root: Path = APPLICATION_ROOT / "app" / "static"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=APPLICATION_ENV_FILE, extra="ignore")
 
     @field_validator("session_cookie_secure", mode="before")
     @classmethod
@@ -125,3 +128,10 @@ class Settings(BaseSettings):
     @property
     def github_return_url(self) -> str:
         return f"{self.app_origin.rstrip('/')}/"
+
+
+def migration_database_url(settings: Settings | None = None) -> str:
+    """Use a nonblank explicit database URL or the resolved application settings."""
+    explicit_database_url = os.getenv("DATABASE_URL")
+    configured_settings = settings if settings is not None else Settings()
+    return explicit_database_url or configured_settings.database_url

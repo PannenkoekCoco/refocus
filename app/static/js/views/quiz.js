@@ -44,23 +44,40 @@ export function renderQuiz({
     screen.setAttribute("aria-labelledby", "quiz-result-heading");
     const card = createElement("article");
     card.className = "quiz-card";
-    const label = createElement("p", savedLocally ? "Quiz saved locally" : "Quiz available for this session");
+    const labelText = savedLocally ? "Quiz saved locally" : "Quiz available for this session";
+    const headingText = `Quiz complete: ${result.correct}/${result.total}.`;
+    const copyText = savedLocally
+      ? `Your ${topic.title} result is available on the route map.`
+      : `Your ${topic.title} result is available for this session. It could not be saved locally.`;
+    const suggestedNextText = recommendation ? `Suggested next: ${recommendation.title}` : null;
+    const authoredMissions = typeof onMission === "function" ? missions : [];
+    const missionSpeechText = authoredMissions.length > 0
+      ? `Choose a practical mission. ${authoredMissions.map((mission) => mission.title).join(". ")}.`
+      : "";
+    const resultSpeechText = [
+      `${labelText}.`,
+      headingText,
+      copyText,
+      suggestedNextText ? `${suggestedNextText}.` : "",
+      missionSpeechText,
+    ].filter(Boolean).join(" ");
+    const label = createElement("p", labelText);
     label.className = "eyebrow";
-    const heading = createElement("h2", `Quiz complete: ${result.correct}/${result.total}.`);
+    const heading = createElement("h2", headingText);
     heading.id = "quiz-result-heading";
-    const copy = createElement(
-      "p",
-      savedLocally
-        ? `Your ${topic.title} result is available on the route map.`
-        : `Your ${topic.title} result is available for this session. It could not be saved locally.`,
-    );
-    const suggestedNext = recommendation
-      ? createElement("p", `Suggested next: ${recommendation.title}`)
-      : null;
+    const copy = createElement("p", copyText);
+    const suggestedNext = suggestedNextText ? createElement("p", suggestedNextText) : null;
     if (suggestedNext) suggestedNext.className = "topic-summary";
+    const resultNarrator = createElement("div");
+    resultNarrator.className = "narrator";
+    renderNarrator({
+      container: resultNarrator,
+      speechText: resultSpeechText,
+      tts,
+      onError: onNarrationError,
+    });
     const actions = createElement("div");
     actions.className = "result-actions";
-    const authoredMissions = typeof onMission === "function" ? missions : [];
     const missionChoices = createElement("div");
     if (authoredMissions.length > 0) {
       const missionHeading = createElement("h3", "Choose a practical mission");
@@ -78,7 +95,7 @@ export function renderQuiz({
     back.className = authoredMissions.length > 0 ? "secondary" : "";
     back.addEventListener("click", onBackToRoute);
     actions.append(back);
-    card.append(label, heading, copy);
+    card.append(label, heading, copy, resultNarrator);
     if (suggestedNext) card.append(suggestedNext);
     if (authoredMissions.length > 0) card.append(missionChoices);
     card.append(actions);
@@ -140,7 +157,7 @@ export function renderQuiz({
         explanationNarrator.className = "narrator";
         renderNarrator({
           container: explanationNarrator,
-          speechText: question.explanationSpeechText,
+          speechText: `${feedbackText} ${question.explanationSpeechText}`,
           tts,
           onError: onNarrationError,
         });

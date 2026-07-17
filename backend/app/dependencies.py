@@ -1,4 +1,3 @@
-import hmac
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
@@ -72,7 +71,7 @@ async def require_same_origin_current_user(
 ) -> User:
     expected_origin = get_settings(request).app_origin.rstrip("/")
     actual_origin = request.headers.get("origin", "").rstrip("/")
-    if not actual_origin or not hmac.compare_digest(actual_origin, expected_origin):
+    if not actual_origin or actual_origin != expected_origin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid request origin")
     return current_user
 

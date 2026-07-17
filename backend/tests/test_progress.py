@@ -1,8 +1,14 @@
 import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
+from fastapi import HTTPException, Request
 from httpx import AsyncClient
 import pytest
+
+from app.config import Settings
+from app.dependencies import require_same_origin_current_user
+from app.models import User
 
 
 def quiz_attempt_payload() -> dict[str, object]:
@@ -36,6 +42,23 @@ async def test_progress_write_rejects_cookie_requests_without_an_origin(authenti
     response = await client.put("/api/progress/topic/apis", json={"status": "explored"})
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_non_ascii_origin_is_rejected_without_an_internal_error() -> None:
+    app = SimpleNamespace(state=SimpleNamespace(settings=Settings(app_origin="http://testserver")))
+    request = Request({
+        "type": "http",
+        "method": "PUT",
+        "path": "/api/progress/topic/apis",
+        "headers": [(b"origin", "☃".encode("utf-8"))],
+        "app": app,
+    })
+
+    with pytest.raises(HTTPException) as error:
+        await require_same_origin_current_user(request, User())
+
+    assert error.value.status_code == 403
 
 
 @pytest.mark.asyncio

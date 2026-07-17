@@ -164,3 +164,17 @@ test("validateTopics rejects an incomplete selectable route", () => {
     /Route topics must contain each required topic exactly once\./,
   );
 });
+
+test("validateTopics rejects starter actions made only of non-visible control text", () => {
+  const payload = JSON.parse(readFileSync(new URL("../../content/topics.json", import.meta.url), "utf8"));
+  for (const nonVisibleText of ["\ufeff", "\u001c"]) {
+    const topics = JSON.parse(JSON.stringify(payload.topics));
+    const docker = topics.find((topic) => topic.id === "docker");
+    docker.starterAction.title = nonVisibleText;
+
+    assert.throws(
+      () => validateTopics(topics),
+      /Starter topic requires an authored starter action: docker/,
+    );
+  }
+});

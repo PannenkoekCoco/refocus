@@ -1,6 +1,5 @@
 from __future__ import with_statement
 
-import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -12,7 +11,7 @@ from sqlalchemy import engine_from_config, pool
 BACKEND_ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.config import Settings
+from app.config import migration_database_url
 from app.models import Base
 
 
@@ -20,7 +19,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", Settings().database_url))
+config.set_main_option("sqlalchemy.url", migration_database_url())
 target_metadata = Base.metadata
 
 
