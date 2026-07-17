@@ -61,6 +61,10 @@ def _github_callback_redirect(settings: SettingsDependency) -> RedirectResponse:
     return response
 
 
+def _is_ascii_secret(value: str | None, max_length: int) -> bool:
+    return bool(value) and len(value) <= max_length and value.isascii()
+
+
 def _github_client(request: Request, settings: SettingsDependency):
     factory = getattr(request.app.state, "github_client_factory", GitHubClient)
     return factory(settings)
@@ -164,14 +168,14 @@ async def github_callback(
     code = request.query_params.get("code")
     cookie_state = request.cookies.get(settings.github_oauth_state_cookie_name)
     code_verifier = request.cookies.get(settings.github_pkce_cookie_name)
-    if (
-        not state
-        or not cookie_state
-        or not code_verifier
-        or len(state) > 512
-        or len(code_verifier) > 128
-        or not hmac.compare_digest(state, cookie_state)
-    ):
+    if not all((
+        _is_ascii_secret(state, max_length=512),
+        _is_ascii_secret(cookie_state, max_length=512),
+        _is_ascii_secret(code_verifier, max_length=128),
+        _is_ascii_secret(code, max_length=2_048),
+    )):
+        return response
+    if not hmac.compare_digest(state, cookie_state):
         return response
     transaction = await consume_oauth_transaction(database, state=state)
     if transaction is None:
@@ -179,10 +183,6 @@ async def github_callback(
     if transaction.user_id != (current_user.id if current_user is not None else None):
         await discard_oauth_transaction(database, transaction_id=transaction.id)
         return response
-    if not code or len(code) > 2_048:
-        await discard_oauth_transaction(database, transaction_id=transaction.id)
-        return response
-
     raw_session_token: str | None = None
     try:
         snapshot = await run_with_github_operation_deadline(

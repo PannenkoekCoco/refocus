@@ -323,6 +323,28 @@ async def test_github_callback_creates_an_opaque_app_session_and_persists_only_t
 
 
 @pytest.mark.asyncio
+async def test_github_callback_rejects_a_non_ascii_state_without_calling_the_provider(
+    configured_github_client,
+) -> None:
+    client, app = configured_github_client
+    fake = FakeGitHub()
+    app.state.github_client_factory = lambda _settings: fake
+    await start_github_authorization(client)
+
+    callback = await client.get(
+        "/api/auth/github/callback",
+        params={"state": "☃", "code": "opaque-code"},
+    )
+
+    assert callback.status_code == 307
+    assert callback.headers["location"] == "http://testserver/"
+    assert callback.headers["cache-control"] == "no-store"
+    assert "opaque-code" not in callback.text
+    assert "opaque-code" not in callback.headers["location"]
+    assert fake.authorization_calls == []
+
+
+@pytest.mark.asyncio
 async def test_github_callback_links_the_signed_in_refocus_user_to_the_stable_github_identity(
     configured_github_client,
 ) -> None:
