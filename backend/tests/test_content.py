@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 import pytest
 
 
@@ -11,6 +12,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.content_repository import ContentRepository
 from app.main import create_app
+from app.schemas import Topic
 
 
 CONTENT_ROOT = BACKEND_ROOT.parent / "content"
@@ -38,6 +40,17 @@ ROUTE_TOPIC_IDS = {
     "asynchronous-jobs-and-queues",
     "software-architecture",
 }
+STARTER_TOPIC_IDS = {
+    "structured-output-tool-calling",
+    "cloud-deployment",
+    "docker",
+    "authentication-and-permissions",
+    "logging-and-monitoring",
+    "llm-evaluation",
+    "retrieval-augmented-generation",
+    "asynchronous-jobs-and-queues",
+    "software-architecture",
+}
 
 
 def test_repository_lists_each_selectable_route_topic_once() -> None:
@@ -46,6 +59,34 @@ def test_repository_lists_each_selectable_route_topic_once() -> None:
     assert {topic["id"] for topic in topics} == ROUTE_TOPIC_IDS
     assert len(topics) == len(ROUTE_TOPIC_IDS)
     assert all(topic["speechText"] for topic in topics)
+
+
+def test_repository_requires_authored_starter_actions_for_each_starter_topic() -> None:
+    topics = ContentRepository(CONTENT_ROOT).topics()
+    starter_topics = [topic for topic in topics if topic["contentStatus"] == "starter"]
+
+    assert {topic["id"] for topic in starter_topics} == STARTER_TOPIC_IDS
+    assert len(starter_topics) == 9
+    for topic in starter_topics:
+        starter_action = topic["starterAction"]
+        assert set(starter_action) == {"id", "title", "description", "speechText"}
+        assert all(
+            isinstance(starter_action[field], str) and starter_action[field].strip()
+            for field in starter_action
+        )
+
+
+def test_starter_topic_schema_rejects_a_missing_starter_action() -> None:
+    starter_topic = next(
+        topic
+        for topic in ContentRepository(CONTENT_ROOT).topics()
+        if topic["id"] == "docker"
+    )
+    starter_topic = dict(starter_topic)
+    starter_topic.pop("starterAction", None)
+
+    with pytest.raises(ValidationError, match="starterAction"):
+        Topic.model_validate(starter_topic)
 
 
 def test_repository_reads_each_full_lesson_pack() -> None:
@@ -81,26 +122,70 @@ def test_repository_rejects_path_like_lesson_ids() -> None:
     assert ContentRepository(CONTENT_ROOT).lesson("../topics") is None
 
 
-def test_api_service_mission_contract_is_readable_without_execution() -> None:
+def test_portfolio_mission_contracts_are_readable_without_execution() -> None:
     payload = json.loads(
         (CONTENT_ROOT / "missions" / "foundation-missions.json").read_text(encoding="utf-8")
     )
 
     assert payload["version"] == 1
-    assert payload["missions"] == [
-        {
-            "id": "api-service-v1",
-            "topicId": "apis",
-            "title": "Ship a small API service",
-            "speechText": "Build a small API service with a deliberate contract.",
-            "evidence": {
-                "requiredFiles": ["backend/app/main.py", "README.md"],
-                "requirePullRequest": True,
-                "requirePassingChecks": True,
-                "requireDeploymentUrl": False,
-            },
-        }
-    ]
+    assert {mission["id"] for mission in payload["missions"]} == {
+        "python-tool-v1",
+        "api-service-v1",
+        "secure-backend-capstone",
+    }
+    missions = {mission["id"]: mission for mission in payload["missions"]}
+    assert missions["python-tool-v1"] == {
+        "id": "python-tool-v1",
+        "topicId": "python-beyond-scripts",
+        "title": "Ship a small Python tool",
+        "speechText": "Build a small Python tool with a clear command and automated tests.",
+        "evidence": {
+            "requiredFiles": ["pyproject.toml", "README.md"],
+            "requirePullRequest": True,
+            "requirePassingChecks": True,
+            "requireDeploymentUrl": False,
+        },
+    }
+    assert missions["api-service-v1"] == {
+        "id": "api-service-v1",
+        "topicId": "apis",
+        "title": "Ship a small API service",
+        "speechText": "Build a small API service with a deliberate contract.",
+        "evidence": {
+            "requiredFiles": ["backend/app/main.py", "README.md"],
+            "requirePullRequest": True,
+            "requirePassingChecks": True,
+            "requireDeploymentUrl": False,
+        },
+    }
+    assert missions["secure-backend-capstone"] == {
+        "id": "secure-backend-capstone",
+        "topicId": "apis",
+        "title": "Ship a secure backend capstone",
+        "speechText": "Deploy a secure backend with deliberate evidence and a working URL.",
+        "evidence": {
+            "requiredFiles": ["backend/app/main.py", "Dockerfile", "README.md"],
+            "requirePullRequest": True,
+            "requirePassingChecks": True,
+            "requireDeploymentUrl": True,
+        },
+    }
+
+
+def test_repository_returns_missions_only_from_the_current_versioned_contract(tmp_path: Path) -> None:
+    missions_directory = tmp_path / "missions"
+    missions_directory.mkdir()
+    (missions_directory / "foundation-missions.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "missions": [{"id": "unversioned-mission"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert ContentRepository(tmp_path).mission("unversioned-mission") is None
 
 
 @pytest.mark.asyncio
@@ -120,9 +205,22 @@ async def test_content_api_returns_typed_route_topics() -> None:
         "prerequisites",
         "summary",
         "speechText",
+        "starterAction",
     }
     assert isinstance(topic["prerequisites"], list)
     assert all(isinstance(prerequisite, str) for prerequisite in topic["prerequisites"])
+    assert topic["starterAction"] is None
+
+
+@pytest.mark.asyncio
+async def test_content_api_returns_a_typed_starter_action() -> None:
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://test") as client:
+        response = await client.get("/api/content/topics")
+
+    assert response.status_code == 200
+    docker = next(topic for topic in response.json()["topics"] if topic["id"] == "docker")
+    assert set(docker["starterAction"]) == {"id", "title", "description", "speechText"}
+    assert docker["starterAction"]["id"] == "docker-first-image"
 
 
 @pytest.mark.asyncio

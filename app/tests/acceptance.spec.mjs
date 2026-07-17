@@ -176,6 +176,28 @@ test("a Python lesson falls back to browser speech and keeps a locally saved qui
   await expect(page.getByRole("heading", { name: "Retrieval-augmented generation" })).toBeVisible();
 });
 
+test("starter actions are topic-specific and APIs offer both authored portfolio missions", async ({ page }) => {
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+
+  await openRouteTopic(page, "docker", "Explore now Docker");
+  await expect(page.getByRole("heading", { name: "Write a one-container plan" })).toBeVisible();
+  await expect(page.getByText(
+    "Choose one app and list its command, port, environment values, and one file that must not enter the image.",
+    { exact: true },
+  )).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to learning route" }).click();
+  await openRouteTopic(page, "apis", "Open APIs");
+  await page.getByRole("button", { name: "Start quiz" }).click();
+  await completeCurrentQuizWithCorrectBAnswers(page);
+  await page.getByRole("button", { name: "See results" }).click();
+
+  await expect(page.getByRole("heading", { name: "Choose a practical mission" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ship a small API service" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ship a secure backend capstone" })).toBeVisible();
+});
+
 test("the API mission journey selects an authorized repository, explains missing evidence, and never exposes a GitHub token", async ({ page }) => {
   await installBrowserSpeechFallback(page);
   let repositorySelected = false;
@@ -252,7 +274,7 @@ test("the API mission journey selects an authorized repository, explains missing
   await page.getByRole("button", { name: "Start quiz" }).click();
   await completeCurrentQuizWithCorrectBAnswers(page);
   await page.getByRole("button", { name: "See results" }).click();
-  await page.getByRole("button", { name: "Continue to mission" }).click();
+  await page.getByRole("button", { name: "Ship a small API service" }).click();
 
   const verification = page.locator(".github-verification");
   await expect(verification.getByRole("heading", { name: "Optional GitHub verification" })).toBeVisible();

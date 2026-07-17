@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.schemas import Topic
+
 
 LESSON_TOPIC_IDS = frozenset(
     {
@@ -22,7 +24,10 @@ class ContentRepository:
 
     def topics(self) -> list[dict[str, object]]:
         payload = json.loads((self._content_root / "topics.json").read_text(encoding="utf-8"))
-        return list(payload["topics"])
+        return [
+            Topic.model_validate(topic).model_dump(by_alias=True)
+            for topic in payload["topics"]
+        ]
 
     def lesson(self, topic_id: str) -> dict[str, object] | None:
         if topic_id not in LESSON_TOPIC_IDS:
@@ -54,6 +59,8 @@ class ContentRepository:
                 encoding="utf-8"
             )
         )
+        if payload.get("version") != 1:
+            return None
         missions = payload.get("missions")
         if not isinstance(missions, list):
             return None

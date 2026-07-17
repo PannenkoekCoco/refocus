@@ -13,6 +13,15 @@ const LESSON_TOPIC_IDS = new Set([
   "testing",
   "ship-secure-backend",
 ]);
+const STARTER_ACTION_FIELDS = ["id", "title", "description", "speechText"];
+
+function isAuthoredStarterAction(starterAction) {
+  return starterAction
+    && typeof starterAction === "object"
+    && STARTER_ACTION_FIELDS.every((field) => (
+      typeof starterAction[field] === "string" && starterAction[field].trim()
+    ));
+}
 
 export function validateTopics(topics) {
   const ids = new Set(topics.map((topic) => topic.id));
@@ -25,6 +34,9 @@ export function validateTopics(topics) {
   for (const topic of topics) {
     if (!topic.title || !topic.speechText || !Array.isArray(topic.prerequisites)) {
       throw new Error(`Invalid route topic: ${topic.id}`);
+    }
+    if (topic.contentStatus === "starter" && !isAuthoredStarterAction(topic.starterAction)) {
+      throw new Error(`Starter topic requires an authored starter action: ${topic.id}`);
     }
   }
   return topics;

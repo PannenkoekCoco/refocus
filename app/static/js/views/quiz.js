@@ -27,6 +27,7 @@ export function renderQuiz({
   onComplete,
   onBack,
   onBackToRoute,
+  missions = [],
   onMission,
 }) {
   const session = createQuizSession(lesson.questions.map(toQuizQuestion));
@@ -59,19 +60,27 @@ export function renderQuiz({
     if (suggestedNext) suggestedNext.className = "topic-summary";
     const actions = createElement("div");
     actions.className = "result-actions";
-    if (onMission) {
-      const mission = createElement("button", "Continue to mission");
-      mission.type = "button";
-      mission.addEventListener("click", onMission);
-      actions.append(mission);
+    const authoredMissions = typeof onMission === "function" ? missions : [];
+    const missionChoices = createElement("div");
+    if (authoredMissions.length > 0) {
+      const missionHeading = createElement("h3", "Choose a practical mission");
+      missionChoices.className = "result-actions";
+      missionChoices.append(missionHeading);
+      for (const mission of authoredMissions) {
+        const missionButton = createElement("button", mission.title);
+        missionButton.type = "button";
+        missionButton.addEventListener("click", () => onMission(mission));
+        missionChoices.append(missionButton);
+      }
     }
     const back = createElement("button", "Back to learning route");
     back.type = "button";
-    back.className = onMission ? "secondary" : "";
+    back.className = authoredMissions.length > 0 ? "secondary" : "";
     back.addEventListener("click", onBackToRoute);
     actions.append(back);
     card.append(label, heading, copy);
     if (suggestedNext) card.append(suggestedNext);
+    if (authoredMissions.length > 0) card.append(missionChoices);
     card.append(actions);
     screen.append(card);
     container.append(screen);

@@ -39,7 +39,13 @@
         "apis"
       ],
       "summary": "Make model behavior typed, inspectable, and bounded.",
-      "speechText": "Structured outputs and tool calling."
+      "speechText": "Structured outputs and tool calling.",
+      "starterAction": {
+        "id": "structured-output-contract",
+        "title": "Write a typed tool contract",
+        "description": "Choose one model tool call and define its input fields, output fields, one validation rule, and the safe failure response.",
+        "speechText": "Starter action. Write a typed tool contract. Choose one model tool call and define its input fields, output fields, one validation rule, and the safe failure response."
+      }
     },
     {
       "id": "sql",
@@ -61,7 +67,13 @@
         "apis"
       ],
       "summary": "Deploy a containerized application safely.",
-      "speechText": "Basic cloud deployment."
+      "speechText": "Basic cloud deployment.",
+      "starterAction": {
+        "id": "cloud-release-checklist",
+        "title": "Plan a safe first deployment",
+        "description": "Choose one app and list its deployment command, environment values, health check, and rollback signal.",
+        "speechText": "Starter action. Plan a safe first deployment for one app. Name its deployment command, environment values, health check, and rollback signal."
+      }
     },
     {
       "id": "docker",
@@ -72,7 +84,13 @@
         "python-beyond-scripts"
       ],
       "summary": "Package a repeatable application environment.",
-      "speechText": "Docker."
+      "speechText": "Docker.",
+      "starterAction": {
+        "id": "docker-first-image",
+        "title": "Write a one-container plan",
+        "description": "Choose one app and list its command, port, environment values, and one file that must not enter the image.",
+        "speechText": "Starter action. Write a one-container plan for one app. Name its command, port, environment values, and a file that must not enter the image."
+      }
     },
     {
       "id": "authentication-and-permissions",
@@ -84,7 +102,13 @@
         "sql"
       ],
       "summary": "Establish identity and enforce ownership.",
-      "speechText": "Authentication and permissions."
+      "speechText": "Authentication and permissions.",
+      "starterAction": {
+        "id": "ownership-rule",
+        "title": "Define one ownership rule",
+        "description": "Choose one resource and write who may create, read, update, and delete it, plus how the server will enforce that rule.",
+        "speechText": "Starter action. Define one ownership rule. Choose one resource and write who may create, read, update, and delete it, plus how the server will enforce that rule."
+      }
     },
     {
       "id": "testing",
@@ -106,7 +130,13 @@
         "apis"
       ],
       "summary": "Observe behavior without leaking private data.",
-      "speechText": "Logging and monitoring."
+      "speechText": "Logging and monitoring.",
+      "starterAction": {
+        "id": "safe-request-log",
+        "title": "Design one safe request log",
+        "description": "Choose one endpoint and list its request ID, useful event fields, one alert condition, and fields that must never be logged.",
+        "speechText": "Starter action. Design one safe request log. Choose one endpoint and list its request ID, useful event fields, one alert condition, and fields that must never be logged."
+      }
     },
     {
       "id": "llm-evaluation",
@@ -118,7 +148,13 @@
         "testing"
       ],
       "summary": "Measure model quality and regressions.",
-      "speechText": "LLM evaluation."
+      "speechText": "LLM evaluation.",
+      "starterAction": {
+        "id": "evaluation-set",
+        "title": "Create a five-case evaluation set",
+        "description": "Pick one model task and write five representative inputs, expected qualities, and one failure that must block release.",
+        "speechText": "Starter action. Create a five-case evaluation set. Pick one model task and write five representative inputs, expected qualities, and one failure that must block release."
+      }
     },
     {
       "id": "retrieval-augmented-generation",
@@ -130,7 +166,13 @@
         "sql"
       ],
       "summary": "Ground answers in retrieved, attributable information.",
-      "speechText": "Retrieval augmented generation."
+      "speechText": "Retrieval augmented generation.",
+      "starterAction": {
+        "id": "retrieval-evidence",
+        "title": "Trace one grounded answer",
+        "description": "Choose one user question and define the source chunks, citation format, retrieval limit, and behavior when evidence is missing.",
+        "speechText": "Starter action. Trace one grounded answer. Choose one user question and define the source chunks, citation format, retrieval limit, and behavior when evidence is missing."
+      }
     },
     {
       "id": "asynchronous-jobs-and-queues",
@@ -142,7 +184,13 @@
         "testing"
       ],
       "summary": "Move slow work out of request handling safely.",
-      "speechText": "Asynchronous jobs and queues."
+      "speechText": "Asynchronous jobs and queues.",
+      "starterAction": {
+        "id": "job-boundary",
+        "title": "Move one slow task to a job",
+        "description": "Choose one request-time task and define the queued payload, retry rule, idempotency key, and user-visible status.",
+        "speechText": "Starter action. Move one slow task to a job. Choose one request-time task and define the queued payload, retry rule, idempotency key, and user-visible status."
+      }
     },
     {
       "id": "software-architecture",
@@ -153,7 +201,13 @@
         "python-beyond-scripts"
       ],
       "summary": "Design small, understandable boundaries and dependencies.",
-      "speechText": "Basic software architecture."
+      "speechText": "Basic software architecture.",
+      "starterAction": {
+        "id": "boundary-map",
+        "title": "Draw three system boundaries",
+        "description": "Choose one small app and name its interface, application, and infrastructure responsibilities with one dependency direction.",
+        "speechText": "Starter action. Draw three system boundaries. Choose one small app and name its interface, application, and infrastructure responsibilities with one dependency direction."
+      }
     }
   ]
 }

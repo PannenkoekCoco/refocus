@@ -183,7 +183,7 @@ function render({ moveFocus = false, focusTarget } = {}) {
       onStartQuiz: () => showQuiz(currentView.topic, currentView.lesson),
     });
   } else if (currentView.name === "quiz") {
-    const mission = missions.find((candidate) => candidate.topicId === currentView.topic.id);
+    const topicMissions = missions.filter((candidate) => candidate.topicId === currentView.topic.id);
     renderQuiz({
       container: app,
       topic: currentView.topic,
@@ -193,7 +193,8 @@ function render({ moveFocus = false, focusTarget } = {}) {
       onComplete: saveQuiz,
       onBack: () => showLesson(currentView.topic, currentView.lesson),
       onBackToRoute: showRoute,
-      onMission: mission ? () => showMission(mission) : null,
+      missions: topicMissions,
+      onMission: showMission,
     });
   } else if (currentView.name === "mission") {
     renderMission({

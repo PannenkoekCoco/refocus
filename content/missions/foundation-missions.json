@@ -15,6 +15,37 @@
         "requirePassingChecks": true,
         "requireDeploymentUrl": false
       }
+    },
+    {
+      "id": "python-tool-v1",
+      "topicId": "python-beyond-scripts",
+      "title": "Ship a small Python tool",
+      "speechText": "Build a small Python tool with a clear command and automated tests.",
+      "evidence": {
+        "requiredFiles": [
+          "pyproject.toml",
+          "README.md"
+        ],
+        "requirePullRequest": true,
+        "requirePassingChecks": true,
+        "requireDeploymentUrl": false
+      }
+    },
+    {
+      "id": "secure-backend-capstone",
+      "topicId": "apis",
+      "title": "Ship a secure backend capstone",
+      "speechText": "Deploy a secure backend with deliberate evidence and a working URL.",
+      "evidence": {
+        "requiredFiles": [
+          "backend/app/main.py",
+          "Dockerfile",
+          "README.md"
+        ],
+        "requirePullRequest": true,
+        "requirePassingChecks": true,
+        "requireDeploymentUrl": true
+      }
     }
   ]
 }

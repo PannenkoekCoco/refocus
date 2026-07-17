@@ -14,6 +14,13 @@ class HealthResponse(ContentModel):
     status: Literal["ok"]
 
 
+class StarterAction(ContentModel):
+    id: str
+    title: str
+    description: str
+    speechText: str
+
+
 class Topic(ContentModel):
     id: str
     title: str
@@ -22,6 +29,13 @@ class Topic(ContentModel):
     prerequisites: list[str]
     summary: str
     speechText: str
+    starterAction: StarterAction | None = None
+
+    @model_validator(mode="after")
+    def starter_topics_require_an_authored_action(self) -> "Topic":
+        if self.contentStatus == "starter" and self.starterAction is None:
+            raise ValueError("starterAction is required for starter topics")
+        return self
 
 
 class TopicsResponse(ContentModel):
@@ -49,13 +63,6 @@ class LessonQuestion(ContentModel):
     correctOption: str
     explanation: str
     explanationSpeechText: str
-
-
-class StarterAction(ContentModel):
-    id: str
-    title: str
-    description: str
-    speechText: str
 
 
 class Lesson(ContentModel):

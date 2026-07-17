@@ -58,7 +58,24 @@ export function renderLesson({
       "This starter exploration gives you the route context. You can return to the map or choose another topic at any time.",
     );
     overview.append(overviewHeading, overviewCopy);
-    screen.append(overview);
+    const starterAction = topic.starterAction;
+    if (!starterAction) {
+      throw new Error(`Starter topic is missing an authored starter action: ${topic.id}`);
+    }
+    const practice = createElement("article");
+    practice.className = "lesson-section";
+    const practiceHeading = createElement("h3", starterAction.title);
+    const practiceCopy = createElement("p", starterAction.description);
+    const practiceNarrator = createElement("div");
+    practiceNarrator.className = "narrator";
+    renderNarrator({
+      container: practiceNarrator,
+      speechText: starterAction.speechText,
+      tts,
+      onError: onNarrationError,
+    });
+    practice.append(practiceHeading, practiceCopy, practiceNarrator);
+    screen.append(overview, practice);
     container.append(screen);
     return;
   }
