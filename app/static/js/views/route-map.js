@@ -1,10 +1,29 @@
+import { renderNarrator } from "../components/narrator.js";
+
 function createElement(tagName, text) {
   const element = document.createElement(tagName);
   if (text !== undefined) element.textContent = text;
   return element;
 }
 
-export function renderRouteMap({ container, route, onPin, onOpenTopic }) {
+function sentence(text) {
+  if (typeof text !== "string" || text.length === 0) return "";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+function routeCardNarration(node) {
+  return [
+    sentence(node.title),
+    sentence(node.badge),
+    sentence(node.category),
+    sentence(node.summary),
+    sentence(node.status),
+    sentence(node.prerequisiteText),
+    node.isPinned ? "Pinned." : "",
+  ].filter(Boolean).join(" ");
+}
+
+export function renderRouteMap({ container, route, onPin, onOpenTopic, tts, onNarrationError }) {
   const section = createElement("section");
   section.className = "route-map";
   section.setAttribute("aria-labelledby", "route-map-heading");
@@ -18,7 +37,15 @@ export function renderRouteMap({ container, route, onPin, onOpenTopic }) {
     "Every topic is available now. Prerequisites are advisory context, not requirements.",
   );
   copy.className = "screen-copy";
-  header.append(heading, copy);
+  const narrator = createElement("div");
+  narrator.className = "narrator";
+  renderNarrator({
+    container: narrator,
+    speechText: "All engineering topics. Every topic is available now. Prerequisites are advisory context, not requirements.",
+    tts,
+    onError: onNarrationError,
+  });
+  header.append(heading, copy, narrator);
 
   const list = createElement("ul");
   list.className = "route-list";
@@ -54,6 +81,14 @@ export function renderRouteMap({ container, route, onPin, onOpenTopic }) {
     status.className = "topic-status";
     const prerequisite = createElement("p", node.prerequisiteText);
     prerequisite.className = "advisory";
+    const narrator = createElement("div");
+    narrator.className = "narrator";
+    renderNarrator({
+      container: narrator,
+      speechText: routeCardNarration(node),
+      tts,
+      onError: onNarrationError,
+    });
 
     const actions = createElement("div");
     actions.className = "topic-card-actions";
@@ -71,7 +106,7 @@ export function renderRouteMap({ container, route, onPin, onOpenTopic }) {
     open.addEventListener("click", () => onOpenTopic(node));
     actions.append(pin, open);
 
-    card.append(cardHeader, category, summary, status, prerequisite, actions);
+    card.append(cardHeader, category, summary, status, prerequisite, narrator, actions);
     item.append(card);
     list.append(item);
   }

@@ -1,3 +1,4 @@
+import { renderNarrator } from "../components/narrator.js";
 import { renderFocusLenses } from "./focus-lenses.js";
 
 function createElement(tagName, text) {
@@ -13,6 +14,18 @@ function recommendationPrerequisiteText(recommendation, topics) {
   }
   const titlesById = new Map(topics.map((topic) => [topic.id, topic.title]));
   return `Advisory prerequisite: ${prerequisiteIds.map((id) => titlesById.get(id) ?? id).join(", ")}. You can start here anytime.`;
+}
+
+function dashboardNarration(recommendation, topics) {
+  return [
+    "Your flexible route.",
+    "Start anywhere. Recommendations are guidance, never a lock or a prerequisite gate.",
+    "Suggested next.",
+    `${recommendation.title}.`,
+    recommendation.reason,
+    recommendationPrerequisiteText(recommendation, topics),
+    recommendation.summary,
+  ].join(" ");
 }
 
 export function renderDashboard({
@@ -38,6 +51,14 @@ export function renderDashboard({
     "Start anywhere. Recommendations are guidance, never a lock or a prerequisite gate.",
   );
   copy.className = "screen-copy";
+  const narrator = createElement("div");
+  narrator.className = "narrator";
+  renderNarrator({
+    container: narrator,
+    speechText: dashboardNarration(recommendation, topics),
+    tts,
+    onError: onNarrationError,
+  });
 
   const card = createElement("article");
   card.className = "recommendation-card";
@@ -59,7 +80,7 @@ export function renderDashboard({
   action.addEventListener("click", () => onOpenTopic(recommendation));
 
   card.append(cardLabel, title, reason, prerequisite, summary, action);
-  section.append(heading, copy, card);
+  section.append(heading, copy, narrator, card);
   renderFocusLenses({
     container: section,
     topics,

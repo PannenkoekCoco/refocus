@@ -131,6 +131,32 @@ async function installBrowserSpeechFallback(page) {
   });
 }
 
+async function installUnavailableSpeech(page) {
+  await page.addInitScript(() => {
+    window.__refocusTtsRequests = 0;
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: undefined,
+    });
+    window.SpeechSynthesisUtterance = undefined;
+    const browserFetch = window.fetch.bind(window);
+    window.fetch = (input, options) => {
+      const target = typeof input === "string" ? input : input?.url ?? String(input);
+      if (target.startsWith("http://127.0.0.1:8767/tts")) {
+        window.__refocusTtsRequests += 1;
+        return Promise.reject(new TypeError("no text-to-speech provider"));
+      }
+      return browserFetch(input, options);
+    };
+  });
+}
+
+async function expectSpokenText(page, text) {
+  await expect.poll(async () => page.evaluate((expectedText) => (
+    window.__refocusSpokenText.includes(expectedText)
+  ), text)).toBe(true);
+}
+
 async function openRouteTopic(page, topicId, actionName) {
   const card = page.locator(`.topic-card[data-topic-id="${topicId}"]`);
   await card.getByRole("button", { name: actionName }).click();
@@ -194,6 +220,70 @@ test("a Python lesson falls back to browser speech and keeps a locally saved qui
   await page.getByRole("button", { name: "Back to learning route" }).click();
   await openRouteTopic(page, "retrieval-augmented-generation", "Explore now Retrieval-augmented generation");
   await expect(page.getByRole("heading", { name: "Retrieval-augmented generation" })).toBeVisible();
+});
+
+test("narration coverage speaks route guidance, practical actions, mission evidence, and feedback", async ({ page }) => {
+  await installBrowserSpeechFallback(page);
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+
+  await page.locator(".dashboard > .narrator").getByRole("button", { name: "Listen" }).click();
+  await expectSpokenText(
+    page,
+    "Your flexible route. Start anywhere. Recommendations are guidance, never a lock or a prerequisite gate. Suggested next. Python beyond scripts. Recommended from your goals and current mastery. No prerequisite is required; you can start here anytime. Turn scripts into maintainable, testable modules.",
+  );
+
+  await page.locator(".route-map-header > .narrator").getByRole("button", { name: "Listen" }).click();
+  await expectSpokenText(
+    page,
+    "All engineering topics. Every topic is available now. Prerequisites are advisory context, not requirements.",
+  );
+
+  const ragCard = page.locator('.topic-card[data-topic-id="retrieval-augmented-generation"]');
+  await ragCard.locator(".narrator").getByRole("button", { name: "Listen" }).click();
+  await expectSpokenText(
+    page,
+    "Retrieval-augmented generation. Starter exploration. ai-systems. Ground answers in retrieved, attributable information. Starter exploration available. Advisory prerequisite: APIs, SQL. You can start here anytime.",
+  );
+
+  await ragCard.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
+  await expectSpokenText(page, "Retrieval-augmented generation is pinned.");
+
+  await openRouteTopic(page, "docker", "Explore now Docker");
+  const starterAction = page.locator(".lesson-section").filter({
+    has: page.getByRole("heading", { name: "Write a one-container plan" }),
+  });
+  await starterAction.locator(".narrator").getByRole("button", { name: "Listen" }).click();
+  await expectSpokenText(
+    page,
+    "Starter action. Write a one-container plan for one app. Name its command, port, environment values, and a file that must not enter the image.",
+  );
+
+  await page.getByRole("button", { name: "Back to learning route" }).click();
+  await openRouteTopic(page, "apis", "Open APIs");
+  await page.getByRole("button", { name: "Start quiz" }).click();
+  await completeCurrentQuizWithCorrectBAnswers(page);
+  await page.getByRole("button", { name: "See results" }).click();
+  await page.getByRole("button", { name: "Ship a small API service" }).click();
+
+  await page.locator(".mission-card > .narrator").getByRole("button", { name: "Listen" }).click();
+  await expectSpokenText(
+    page,
+    "Build a small API service with a deliberate contract. Choose a path, reflect on your work, and record your own review. Self-review checklist. Review whether you created backend/app/main.py. Review whether you created README.md. Review whether you wrote a pull-request-ready summary. Review whether you ran the checks you chose for this project.",
+  );
+});
+
+test("status narration leaves pin feedback visible when no provider is available", async ({ page }) => {
+  await installUnavailableSpeech(page);
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+
+  const ragCard = page.locator('.topic-card[data-topic-id="retrieval-augmented-generation"]');
+  await ragCard.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
+
+  await expect(page.locator("#status-message")).toHaveText("Retrieval-augmented generation is pinned.");
+  await expect.poll(() => page.evaluate(() => window.__refocusTtsRequests)).toBe(1);
+  await expect(page.locator("#status-message")).toHaveText("Retrieval-augmented generation is pinned.");
 });
 
 test("starter actions are topic-specific and APIs offer both authored portfolio missions", async ({ page }) => {

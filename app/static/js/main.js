@@ -20,8 +20,12 @@ import { renderRouteMap } from "./views/route-map.js";
 
 const app = document.querySelector("#app");
 const shellHeader = document.querySelector("#shell-header");
-const statusMessage = createStatusMessage(document.querySelector("#status-message"));
 const tts = createTtsProvider();
+const statusMessage = createStatusMessage({
+  container: document.querySelector("#status-message"),
+  tts,
+  onNarrationError: () => {},
+});
 const SESSION_ONLY_PROGRESS_MESSAGE = "Progress is available for this session only because it could not be saved locally.";
 
 function getBrowserStorage() {
@@ -173,6 +177,8 @@ function render({ moveFocus = false, focusTarget } = {}) {
       route: getRoute(),
       onPin: togglePin,
       onOpenTopic: openTopic,
+      tts,
+      onNarrationError: statusMessage.announce,
     });
   } else if (currentView.name === "lesson") {
     renderLesson({

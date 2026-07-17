@@ -333,7 +333,7 @@ test("a learner can safely select an authorized GitHub repository and review ver
     }
   }
   await page.getByRole("button", { name: "See results" }).click();
-  await page.getByRole("button", { name: "Continue to mission" }).click();
+  await page.getByRole("button", { name: "Ship a small API service" }).click();
 
   await expect(page.getByRole("heading", { name: "Optional GitHub verification" })).toBeVisible();
   for (const permission of [
@@ -407,7 +407,7 @@ test("GitHub verification guidance remains available to browser text to speech",
     }
   }
   await page.getByRole("button", { name: "See results" }).click();
-  await page.getByRole("button", { name: "Continue to mission" }).click();
+  await page.getByRole("button", { name: "Ship a small API service" }).click();
 
   await page.locator(".github-verification > .narrator").getByRole("button", { name: "Listen" }).click();
   await expect.poll(() => page.evaluate(() => (

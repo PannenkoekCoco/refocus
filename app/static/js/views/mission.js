@@ -56,7 +56,12 @@ export function renderMission({
   narrator.className = "narrator";
   renderNarrator({
     container: narrator,
-    speechText: mission.speechText,
+    speechText: [
+      mission.speechText,
+      "Choose a path, reflect on your work, and record your own review.",
+      "Self-review checklist.",
+      ...evidenceItems(mission.evidence),
+    ].join(" "),
     tts,
     onError: onNarrationError,
   });
