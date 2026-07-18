@@ -228,6 +228,71 @@ test("the header navigates explicitly between Today, Route, and Tailor", async (
   await expect(navigation.getByRole("button", { name: "Tailor" })).toHaveAttribute("aria-current", "page");
 });
 
+test("Tailor starts with a low-friction choice before the advanced editor", async ({ page }) => {
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Tailor my route" }).click();
+  await expect(page.getByRole("heading", { name: "Tailor your route" })).toBeVisible();
+  await expect(page.getByLabel("Job description")).toHaveCount(0);
+  await page.getByRole("button", { name: "Aim for a role" }).click();
+  await expect(page.getByLabel("Job description")).toBeVisible();
+});
+
+test("Tailor follows the foundation without applying a focus lens and returns to Today", async ({ page }) => {
+  const focusLensWrites = [];
+  await mockInitialBrowserApis(page);
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/focus-lenses" && request.method() !== "GET") {
+      focusLensWrites.push(request.method());
+    }
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Tailor my route" }).click();
+
+  for (const choice of ["Follow the foundation", "Aim for a role", "Build toward a goal"]) {
+    await expect(page.getByRole("button", { name: choice })).toBeVisible();
+  }
+  await expect(page.getByRole("button", { name: "Back to Today" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Preview skills" })).toHaveCount(0);
+  await expect(page.getByRole("slider")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Back to Today" }).click();
+  await expect(page.locator(".today-view")).toBeVisible();
+  await page.getByRole("button", { name: "Tailor my route" }).click();
+
+  await page.getByRole("button", { name: "Follow the foundation" }).click();
+
+  await expect(page.locator(".today-view")).toBeVisible();
+  await expect(page.locator("#status-message")).toContainText("Following the foundation.");
+  expect(focusLensWrites).toEqual([]);
+});
+
+test("Tailor reveals development goal weights only after a successful preview", async ({ page }) => {
+  let previewPayload = null;
+  await mockInitialBrowserApis(page);
+  await page.route("**/api/focus-lenses/preview", async (route) => {
+    previewPayload = JSON.parse(route.request().postData());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ skills: [{ topicId: "apis", weight: 0.6 }] }),
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Tailor my route" }).click();
+  await page.getByRole("button", { name: "Build toward a goal" }).click();
+
+  const goal = page.getByLabel("Development goal");
+  await expect(goal).toBeVisible();
+  await expect(page.getByRole("slider")).toHaveCount(0);
+  await goal.fill("Build a reliable API service.");
+  await page.getByRole("button", { name: "Preview skills" }).click();
+
+  await expect(page.getByRole("slider", { name: "APIs weight" })).toHaveValue("0.6");
+  expect(previewPayload).toEqual({ kind: "development", originalText: "Build a reliable API service." });
+});
+
 test("the route library filters topics without hiding free navigation", async ({ page }) => {
   await mockInitialBrowserApis(page);
   await page.goto("/");
@@ -787,7 +852,7 @@ test("startup progress sync absorbs an early online event without repeating the 
   expect(replayWrites).toBe(1);
 });
 
-test("online hydration preserves an unapplied focus-lens draft without caching its source text", async ({ page }) => {
+test("online hydration preserves an unapplied job description focus-lens draft without caching its source text", async ({ page }) => {
   const privateDraft = "Keep this job description only in the current browser memory.";
   let snapshotRequests = 0;
   await mockInitialBrowserApis(page);
@@ -823,6 +888,7 @@ test("online hydration preserves an unapplied focus-lens draft without caching i
   ).exploredLessonIds.includes("sql"))).toBe(true);
 
   await showTailor(page);
+  await page.getByRole("button", { name: "Aim for a role" }).click();
   const jobDescription = page.getByRole("textbox", { name: "Job description" });
   await jobDescription.fill(privateDraft);
   await page.getByRole("button", { name: "Preview skills" }).click();

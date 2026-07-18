@@ -338,6 +338,8 @@ function render({ moveFocus = false, focusTarget } = {}) {
         focusLensDraft = nextDraft;
       },
       onStatus: statusMessage.announce,
+      onUseFoundation: () => statusMessage.announce("Following the foundation."),
+      onBack: showToday,
     });
     app.append(tailorView);
   } else if (currentView.name === "lesson") {
@@ -421,6 +423,9 @@ function showRoute() {
 
 function showTailor() {
   currentView = { name: "tailor" };
+  if (focusLensDraft?.editorOpen) {
+    focusLensDraft = { ...focusLensDraft, editorOpen: false };
+  }
   render({ moveFocus: true });
 }
 

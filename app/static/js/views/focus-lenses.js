@@ -79,9 +79,13 @@ export function renderFocusLenses({
   onApply = async () => {},
   onDraftChange = () => {},
   onStatus = () => {},
+  onUseFoundation = () => {},
+  onBack = () => {},
 }) {
   const draftsByKind = normaliseDrafts(draft?.byKind, topics);
-  let selectedKind = KIND_COPY[draft?.selectedKind] ? draft.selectedKind : "job";
+  const draftedKind = KIND_COPY[draft?.selectedKind] ? draft.selectedKind : null;
+  let selectedKind = draftedKind ?? "job";
+  let editorOpen = draft?.editorOpen === true;
   let selectedLens = activeLensForKind(lenses, selectedKind);
   let currentSkills = normaliseSkills(selectedLens?.skills, topics);
 
@@ -108,6 +112,8 @@ export function renderFocusLenses({
 
   const kindControls = createElement("div");
   kindControls.className = "focus-lens-kind-controls";
+  const intentControls = createElement("div");
+  intentControls.className = "focus-lens-intents";
   const field = createElement("div");
   field.className = "focus-lens-field";
   const label = createElement("label");
@@ -128,6 +134,10 @@ export function renderFocusLenses({
   const skillsPanel = createElement("div");
   skillsPanel.className = "focus-lens-skills";
   field.append(label, textarea, privacy, preview, skillsPanel);
+  const back = createElement("button", "Back to Today");
+  back.type = "button";
+  back.className = "secondary";
+  back.addEventListener("click", onBack);
 
   function copySkills(skills) {
     return skills.map((skill) => ({ ...skill }));
@@ -136,6 +146,7 @@ export function renderFocusLenses({
   function publishDraft() {
     onDraftChange({
       selectedKind,
+      editorOpen,
       byKind: Object.fromEntries(
         Object.entries(draftsByKind).map(([kind, currentDraft]) => [kind, {
           originalText: currentDraft.originalText,
@@ -250,6 +261,26 @@ export function renderFocusLenses({
     renderSkillControls();
   }
 
+  function renderEditor() {
+    section.replaceChildren(heading, copy, narrator, kindControls, field, back);
+    loadKind(selectedKind);
+  }
+
+  function openEditor(kind) {
+    selectedKind = kind;
+    editorOpen = true;
+    publishDraft();
+    renderEditor();
+  }
+
+  const foundation = createElement("button", "Follow the foundation");
+  foundation.type = "button";
+  foundation.addEventListener("click", () => {
+    onUseFoundation();
+    onBack();
+  });
+  intentControls.append(foundation);
+
   for (const kind of Object.keys(KIND_COPY)) {
     const control = createElement("button", KIND_COPY[kind].button);
     control.type = "button";
@@ -260,6 +291,15 @@ export function renderFocusLenses({
       publishDraft();
     });
     kindControls.append(control);
+
+    const intent = createElement(
+      "button",
+      kind === "job" ? "Aim for a role" : "Build toward a goal",
+    );
+    intent.type = "button";
+    intent.className = "secondary";
+    intent.addEventListener("click", () => openEditor(kind));
+    intentControls.append(intent);
   }
 
   textarea.addEventListener("input", rememberCurrentDraft);
@@ -289,7 +329,10 @@ export function renderFocusLenses({
     }
   });
 
-  section.append(heading, copy, narrator, kindControls, field);
   container.append(section);
-  loadKind(selectedKind);
+  if (editorOpen) {
+    renderEditor();
+  } else {
+    section.append(heading, copy, narrator, intentControls, back);
+  }
 }
