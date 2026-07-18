@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -83,9 +84,30 @@ test("Today momentum counts explored, practised, and applied work", () => {
 
 test("route groups search title and summary without removing a free topic", () => {
   const groups = selectRouteGroups([
-    { id: "apis", title: "APIs", summary: "Build a service", category: "FOUNDATION" },
-    { id: "docker", title: "Docker", summary: "Package an app", category: "PRODUCTION" },
+    { id: "apis", title: "APIs", summary: "Build a service", category: "foundation" },
+    { id: "docker", title: "Docker", summary: "Package an app", category: "production" },
   ], { query: "service", category: "all" });
 
   assert.equal(groups[0].nodes[0].id, "apis");
+});
+
+test("route groups cover every shipped lower-case category in stage order", () => {
+  const { topics } = JSON.parse(readFileSync(
+    new URL("../../content/topics.json", import.meta.url),
+    "utf8",
+  ));
+  const groups = selectRouteGroups(topics);
+  const groupedNodes = groups.flatMap((group) => group.nodes);
+
+  assert.equal(topics.length, 14);
+  assert.deepEqual(groups.map(({ id, title, nodes }) => ({ id, title, count: nodes.length })), [
+    { id: "foundations", title: "Foundations", count: 6 },
+    { id: "build-and-ship", title: "Build and ship", count: 5 },
+    { id: "ai-systems", title: "AI systems", count: 3 },
+  ]);
+  assert.equal(groupedNodes.length, topics.length);
+  assert.deepEqual(
+    groupedNodes.map((node) => node.id).sort(),
+    topics.map((topic) => topic.id).sort(),
+  );
 });

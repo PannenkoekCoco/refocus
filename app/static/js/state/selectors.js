@@ -72,9 +72,9 @@ export function selectRouteView(topics, progress = {}, focus = {}) {
 }
 
 export const ROUTE_STAGES = Object.freeze([
-  { id: "foundations", title: "Foundations", categories: ["FOUNDATION"] },
-  { id: "build-and-ship", title: "Build and ship", categories: ["PRODUCTION"] },
-  { id: "ai-systems", title: "AI systems", categories: ["AI-SYSTEMS"] },
+  { id: "foundations", title: "Foundations", categories: ["foundation"] },
+  { id: "build-and-ship", title: "Build and ship", categories: ["production"] },
+  { id: "ai-systems", title: "AI systems", categories: ["ai-systems"] },
 ]);
 
 export function selectTodayMomentum({ topics, progress, missions }) {
