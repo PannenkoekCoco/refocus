@@ -66,3 +66,15 @@ test("the retired EMA launcher delegates to Refocus and release guidance names t
   assert.match(gitignore, /^local-tts\/\*\.log$/m);
   assert.match(appRoot, /ema-cram-app[\\/]?$/);
 });
+
+test("the Refocus launcher waits for FastAPI health before opening the browser", () => {
+  const launcher = readFileSync(new URL("../../Launch Learning Companion.cmd", import.meta.url), "utf8")
+    .replace(/\r\n/g, "\n");
+
+  assert.match(launcher, /function Test-AppHealth/);
+  assert.match(launcher, /http:\/\/127\.0\.0\.1:8000\/health/);
+  assert.match(launcher, /while \(\(Get-Date\) -lt \$deadline -and -not \(Test-AppHealth\)\)/);
+  assert.ok(
+    launcher.indexOf("Test-AppHealth") < launcher.indexOf('start "" "http://127.0.0.1:8000/"'),
+  );
+});

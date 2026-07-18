@@ -24,6 +24,13 @@ echo Starting Learning Companion at http://127.0.0.1:8000/
 pushd "%ROOT%backend"
 start "Learning Companion API" /B "%BACKEND_PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 popd
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference = 'SilentlyContinue'; function Test-AppHealth { try { $response = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 1; return $response.status -eq 'ok' } catch { return $false } }; $deadline = (Get-Date).AddSeconds(15); while ((Get-Date) -lt $deadline -and -not (Test-AppHealth)) { Start-Sleep -Milliseconds 250 }; if (-not (Test-AppHealth)) { exit 1 }"
+if errorlevel 1 (
+  echo Refocus did not become ready. Check that port 8000 is available and try again.
+  pause
+  exit /b 1
+)
 start "" "http://127.0.0.1:8000/"
 
 endlocal
