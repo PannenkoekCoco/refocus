@@ -210,13 +210,25 @@ test("Today offers one next learning action before route browsing", async ({ pag
   await expect(page.locator(".route-library .topic-card")).toHaveCount(14);
 });
 
+test("Today remains compact and usable at a phone viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+
+  await expect(page.locator(".today-view .today-primary-action")).toHaveCount(1);
+  await expect(page.locator(".today-view .topic-card")).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test("the header navigates explicitly between Today, Route, and Tailor", async ({ page }) => {
   await mockInitialBrowserApis(page);
   await page.goto("/");
 
   const navigation = page.getByRole("navigation", { name: "Learning views" });
   await expect(navigation.getByRole("button")).toHaveText(["Today", "Route", "Tailor"]);
-  await expect(navigation.getByRole("button", { name: "Today" })).toHaveAttribute("aria-current", "page");
+  const today = navigation.getByRole("button", { name: "Today" });
+  await expect(today).toHaveAttribute("aria-current", "page");
+  await expect(today).toHaveCSS("color", "rgb(20, 33, 61)");
 
   await navigation.getByRole("button", { name: "Route" }).click();
   await expect(page.locator(".route-library")).toBeVisible();
@@ -679,7 +691,7 @@ test("the API mission journey selects an authorized repository, explains missing
   }
 });
 
-test("keyboard focus, polite status, and the route grid work at mobile and desktop widths", async ({ page }) => {
+test("keyboard focus, polite status, and the route grid use one mobile and two desktop columns", async ({ page }) => {
   await mockInitialBrowserApis(page);
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto("/");
@@ -701,11 +713,17 @@ test("keyboard focus, polite status, and the route grid work at mobile and deskt
   )));
   expect(mobileColumns).toEqual([1, 1, 1]);
 
+  await page.setViewportSize({ width: 768, height: 900 });
+  const boundaryColumns = await routeLists.evaluateAll((elements) => elements.map((element) => (
+    getComputedStyle(element).gridTemplateColumns.split(" ").length
+  )));
+  expect(boundaryColumns).toEqual([1, 1, 1]);
+
   await page.setViewportSize({ width: 1280, height: 900 });
   const desktopColumns = await routeLists.evaluateAll((elements) => elements.map((element) => (
     getComputedStyle(element).gridTemplateColumns.split(" ").length
   )));
-  expect(desktopColumns).toEqual([3, 3, 3]);
+  expect(desktopColumns).toEqual([2, 2, 2]);
 });
 
 test("offline progress sync hydrates once, acknowledges only delivered work, and keeps a local mission reflection", async ({ page }) => {

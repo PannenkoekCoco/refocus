@@ -1,11 +1,27 @@
 import { expect, test } from "@playwright/test";
 
+async function browseAllTopics(page) {
+  await page.getByRole("button", { name: "Browse all topics" }).click();
+  await expect(page.locator(".route-library")).toBeVisible();
+}
+
+async function openRouteTopic(page, title) {
+  await browseAllTopics(page);
+  await page.getByRole("button", { name: `Open ${title}` }).click();
+}
+
+async function openTailorEditor(page, intent) {
+  await page.getByRole("button", { name: "Tailor my route" }).click();
+  await page.getByRole("button", { name: intent }).click();
+}
+
 test("a learner can pin RAG, complete an API quiz, and retain progress", async ({ page }) => {
   await page.goto("./");
 
+  await browseAllTopics(page);
   await page.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
+  await expect(page.getByText("Retrieval-augmented generation is pinned.")).toBeVisible();
   await page.getByRole("button", { name: "Open APIs" }).click();
-  await expect(page.getByText("You pinned this topic.")).toBeVisible();
   await page.getByRole("button", { name: "Start quiz" }).click();
 
   for (let questionIndex = 0; questionIndex < 3; questionIndex += 1) {
@@ -24,6 +40,7 @@ test("a learner can pin RAG, complete an API quiz, and retain progress", async (
   await expect(page.getByText("Quiz complete: 3/3.")).toBeVisible();
 
   await page.reload();
+  await browseAllTopics(page);
   await expect(page.getByRole("button", { name: "Unpin Retrieval-augmented generation" })).toBeVisible();
   await expect(page.getByText("Quiz complete: 3/3.")).toBeVisible();
 });
@@ -61,7 +78,7 @@ test("topic exploration syncs and quiz results render from durable local state w
   });
 
   await page.goto("./");
-  await page.getByRole("button", { name: "Open APIs" }).click();
+  await openRouteTopic(page, "APIs");
   await expect.poll(() => progressRequests).toContain("PUT");
   await page.getByRole("button", { name: "Start quiz" }).click();
 
@@ -151,6 +168,7 @@ test("the live quiz renders its local recommendation while durable replay is pen
 
 test("pinning keeps focus on the replacement pin control", async ({ page }) => {
   await page.goto("./");
+  await browseAllTopics(page);
   await page.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
 
   await expect(page.getByRole("button", { name: "Unpin Retrieval-augmented generation" })).toBeFocused();
@@ -158,7 +176,7 @@ test("pinning keeps focus on the replacement pin control", async ({ page }) => {
 
 test("quiz feedback and results receive predictable focus", async ({ page }) => {
   await page.goto("./");
-  await page.getByRole("button", { name: "Open APIs" }).click();
+  await openRouteTopic(page, "APIs");
   await page.getByRole("button", { name: "Start quiz" }).click();
 
   await page.getByRole("button", { name: /^B\./ }).click();
@@ -186,6 +204,7 @@ test("unavailable browser storage is announced as session-only progress", async 
     });
   });
   await page.goto("./");
+  await browseAllTopics(page);
   await page.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
 
   await expect(page.getByText(
@@ -195,7 +214,7 @@ test("unavailable browser storage is announced as session-only progress", async 
 
 test("a route transition focuses the lesson title instead of the whole app region", async ({ page }) => {
   await page.goto("./");
-  await page.getByRole("button", { name: "Open APIs" }).click();
+  await openRouteTopic(page, "APIs");
 
   await expect(page.getByRole("heading", { name: "APIs" })).toBeFocused();
 });
@@ -212,7 +231,7 @@ test("the visible skip link does not cover the Refocus title", async ({ page }) 
 test("the initial route does not move focus before learner interaction", async ({ page }) => {
   await page.goto("./");
 
-  await expect(page.getByRole("heading", { name: "Your flexible route" })).not.toBeFocused();
+  await expect(page.getByRole("heading", { name: "Today" })).not.toBeFocused();
 });
 
 test("a learner can preview, edit, and locally apply a job lens when saving is unavailable", async ({ page }) => {
@@ -236,6 +255,7 @@ test("a learner can preview, edit, and locally apply a job lens when saving is u
   });
 
   await page.goto("./");
+  await openTailorEditor(page, "Aim for a role");
   const jobDescription = page.getByRole("textbox", { name: "Job description" });
   const rawText = "<img src=x onerror=alert(1)> Build an API";
   await jobDescription.fill(rawText);
@@ -244,6 +264,7 @@ test("a learner can preview, edit, and locally apply a job lens when saving is u
   await page.getByRole("slider", { name: "APIs weight" }).press("End");
   await page.getByRole("button", { name: "Apply to route" }).click();
 
+  await page.getByRole("button", { name: "Today", exact: true }).click();
   await expect(page.locator(".recommendation-card")).toContainText("APIs");
   await expect(page.getByText("Applied to your route. Sign in to save this focus lens.")).toBeVisible();
   await expect(page.locator("img")).toHaveCount(0);
@@ -276,10 +297,12 @@ test("owned saved lenses reload into editable controls without rendering learner
   });
 
   await page.goto("./");
+  await openTailorEditor(page, "Aim for a role");
 
   await expect(page.getByRole("textbox", { name: "Job description" })).toHaveValue(rawText);
+  await page.getByRole("button", { name: "Today", exact: true }).click();
   await expect(page.locator(".recommendation-card")).toContainText("APIs");
-  await expect(page.locator("strong")).toHaveCount(0);
+  await expect(page.locator("strong").filter({ hasText: "Private role text" })).toHaveCount(0);
 });
 
 test("a learner can safely select an authorized GitHub repository and review verification feedback", async ({ page }) => {
@@ -335,7 +358,7 @@ test("a learner can safely select an authorized GitHub repository and review ver
   });
 
   await page.goto("./");
-  await page.getByRole("button", { name: "Open APIs" }).click();
+  await openRouteTopic(page, "APIs");
   await page.getByRole("button", { name: "Start quiz" }).click();
   for (let questionIndex = 0; questionIndex < 3; questionIndex += 1) {
     await page.getByRole("button", { name: /^B\./ }).click();
@@ -409,7 +432,7 @@ test("GitHub verification guidance remains available to browser text to speech",
   });
 
   await page.goto("./");
-  await page.getByRole("button", { name: "Open APIs" }).click();
+  await openRouteTopic(page, "APIs");
   await page.getByRole("button", { name: "Start quiz" }).click();
   for (let questionIndex = 0; questionIndex < 3; questionIndex += 1) {
     await page.getByRole("button", { name: /^B\./ }).click();
