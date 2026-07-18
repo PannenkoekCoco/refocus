@@ -12,16 +12,17 @@ function actionLabel(recommendation) {
     : `Explore ${recommendation.title}`;
 }
 
-function todayNarration(recommendation, momentum) {
+function todayNarration(recommendation, momentum, activeLens) {
   return [
     "Today.",
     "Your next learning action.",
     `Suggested next: ${recommendation.title}.`,
     recommendation.reason,
     recommendation.summary,
+    activeLens?.label,
     `Your momentum: ${momentum.explored} explored, ${momentum.practised} practised, and ${momentum.applied} applied out of ${momentum.total} topics.`,
     "Browse all topics or tailor your route whenever you want.",
-  ].join(" ");
+  ].filter(Boolean).join(" ");
 }
 
 function renderMomentumItem(label, value) {
@@ -37,6 +38,7 @@ export function renderToday({
   container,
   recommendation,
   momentum,
+  activeLens = null,
   onOpenTopic,
   onNavigate,
   tts,
@@ -57,7 +59,7 @@ export function renderToday({
   narrator.className = "narrator";
   renderNarrator({
     container: narrator,
-    speechText: todayNarration(recommendation, momentum),
+    speechText: todayNarration(recommendation, momentum, activeLens),
     tts,
     onError: onNarrationError,
   });
@@ -76,6 +78,18 @@ export function renderToday({
   action.className = "today-primary-action";
   action.addEventListener("click", () => onOpenTopic(recommendation));
   card.append(label, title, reason, summary, action);
+
+  const activeLensSummary = activeLens?.label ? createElement("section") : null;
+  if (activeLensSummary) {
+    activeLensSummary.className = "today-active-lens";
+    activeLensSummary.setAttribute("aria-label", "Route tailoring");
+    const activeLensLabel = createElement("p", activeLens.label);
+    const editTailoring = createElement("button", "Edit tailoring");
+    editTailoring.type = "button";
+    editTailoring.className = "secondary";
+    editTailoring.addEventListener("click", () => onNavigate("tailor"));
+    activeLensSummary.append(activeLensLabel, editTailoring);
+  }
 
   const momentumSection = createElement("section");
   momentumSection.className = "today-momentum";
@@ -105,6 +119,8 @@ export function renderToday({
   tailor.addEventListener("click", () => onNavigate("tailor"));
   actions.append(browse, tailor);
 
-  section.append(heading, copy, narrator, card, momentumSection, actions);
+  section.append(heading, copy, narrator, card);
+  if (activeLensSummary) section.append(activeLensSummary);
+  section.append(momentumSection, actions);
   container.append(section);
 }

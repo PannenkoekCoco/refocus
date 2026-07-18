@@ -231,6 +231,19 @@ function getRoute() {
   });
 }
 
+function getActiveFocusLensSummary() {
+  const activeLens = focusLenses.find((lens) => (
+    lens?.isActive === true && ["job", "development"].includes(lens.kind)
+  ));
+  if (!activeLens) return null;
+  return {
+    kind: activeLens.kind,
+    label: activeLens.kind === "job"
+      ? "Route tailored for a role"
+      : "Route tailored for your development goal",
+  };
+}
+
 function getPrerequisiteText(topicId) {
   return getRoute().find((node) => node.id === topicId)?.prerequisiteText
     ?? "No prerequisite is required; you can start here anytime.";
@@ -295,6 +308,7 @@ function render({ moveFocus = false, focusTarget } = {}) {
       container: app,
       recommendation,
       momentum,
+      activeLens: getActiveFocusLensSummary(),
       onOpenTopic: openTopic,
       onNavigate: (viewName) => {
         if (viewName === "route") showRoute();
@@ -403,15 +417,21 @@ function render({ moveFocus = false, focusTarget } = {}) {
   }
 }
 
-function togglePin(topic) {
+function togglePin(topic, focusRegion = "all-topics") {
   const isPinned = store.getState().pinnedTopicId === topic.id;
   dispatchLearningState(
     { type: isPinned ? "unpin" : "pin", topicId: topic.id },
     isPinned ? `${topic.title} is no longer pinned.` : `${topic.title} is pinned.`,
   );
   render({
-    focusTarget: (container) => [...container.querySelectorAll("[data-pin-topic-id]")]
-      .find((control) => control.dataset.pinTopicId === topic.id),
+    focusTarget: (container) => {
+      const topicPin = (region) => container.querySelector(
+        `.${region} [data-pin-topic-id="${topic.id}"]`,
+      );
+      return focusRegion === "for-you"
+        ? topicPin("route-for-you") ?? topicPin("all-topics")
+        : topicPin("all-topics");
+    },
   });
 }
 

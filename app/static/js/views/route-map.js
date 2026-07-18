@@ -20,7 +20,7 @@ function createElement(tagName, text) {
   return element;
 }
 
-function renderTopicCard({ node, onPin, onOpenTopic }) {
+function renderTopicCard({ node, onPin, onOpenTopic, region }) {
   const card = createElement("article");
   card.className = "topic-card";
   if (node.isPinned) card.classList.add("is-pinned");
@@ -36,7 +36,7 @@ function renderTopicCard({ node, onPin, onOpenTopic }) {
   pin.dataset.pinTopicId = node.id;
   pin.setAttribute("aria-label", `${node.isPinned ? "Unpin" : "Pin"} ${node.title}`);
   pin.setAttribute("aria-pressed", String(node.isPinned));
-  pin.addEventListener("click", () => onPin(node));
+  pin.addEventListener("click", () => onPin(node, region));
   cardHeader.append(title, pin);
 
   const meta = createElement("div");
@@ -47,6 +47,8 @@ function renderTopicCard({ node, onPin, onOpenTopic }) {
   level.className = `badge ${node.contentStatus === "full" ? "full-path" : "starter"}`;
   meta.append(category, level);
 
+  const summary = createElement("p", node.summary);
+  summary.className = "topic-summary";
   const status = createElement("p", node.status);
   status.className = "topic-status";
   const open = createElement("button", node.actionLabel);
@@ -57,8 +59,17 @@ function renderTopicCard({ node, onPin, onOpenTopic }) {
   }
   open.addEventListener("click", () => onOpenTopic(node));
 
-  card.append(cardHeader, meta, status, open);
+  card.append(cardHeader, meta, summary, status, open);
   return card;
+}
+
+function forYouNodes(route) {
+  const advisoryNodes = route.filter((node) => node.isPinned || node.isRecommended);
+  const advisoryIds = new Set(advisoryNodes.map((node) => node.id));
+  const nextCandidates = route
+    .filter((node) => !advisoryIds.has(node.id))
+    .slice(0, 2);
+  return [...advisoryNodes, ...nextCandidates];
 }
 
 export function renderRouteMap({
@@ -139,15 +150,22 @@ export function renderRouteMap({
   library.className = "route-library-results";
   library.setAttribute("aria-live", "polite");
 
-  function renderLibrary() {
-    query = search.value;
-    const groups = selectRouteGroups(route, { query, category });
-    library.replaceChildren();
+  function renderTopicList(nodes, className, region) {
+    const list = createElement("ul");
+    list.className = className;
+    for (const node of nodes) {
+      const item = createElement("li");
+      item.append(renderTopicCard({ node, onPin, onOpenTopic, region }));
+      list.append(item);
+    }
+    return list;
+  }
 
+  function appendStageGroups(container, groups) {
     if (groups.length === 0) {
       const empty = createElement("p", "No topics match that search yet.");
       empty.className = "route-empty";
-      library.append(empty);
+      container.append(empty);
       return;
     }
 
@@ -155,20 +173,45 @@ export function renderRouteMap({
       const stage = createElement("section");
       stage.className = "route-stage";
       stage.setAttribute("aria-labelledby", `route-stage-${group.id}`);
-      const stageHeading = createElement("h3", group.title);
+      const stageHeading = createElement("h4", group.title);
       stageHeading.id = `route-stage-${group.id}`;
-      const list = createElement("ul");
-      list.className = "route-list";
-
-      for (const node of group.nodes) {
-        const item = createElement("li");
-        item.append(renderTopicCard({ node, onPin, onOpenTopic }));
-        list.append(item);
-      }
-
-      stage.append(stageHeading, list);
-      library.append(stage);
+      stage.append(stageHeading, renderTopicList(group.nodes, "route-list", "all-topics"));
+      container.append(stage);
     }
+  }
+
+  function renderLibrary() {
+    query = search.value;
+    const groups = selectRouteGroups(route, { query, category });
+    library.replaceChildren();
+
+    if (!query.trim() && category === "all") {
+      const forYou = createElement("section");
+      forYou.className = "route-for-you";
+      forYou.setAttribute("aria-labelledby", "route-for-you-heading");
+      const forYouHeading = createElement("h3", "For you");
+      forYouHeading.id = "route-for-you-heading";
+      const forYouCopy = createElement(
+        "p",
+        "A few optional suggestions. Every topic remains open in the full route below.",
+      );
+      forYouCopy.className = "screen-copy";
+      forYou.append(
+        forYouHeading,
+        forYouCopy,
+        renderTopicList(forYouNodes(route), "route-for-you-list", "for-you"),
+      );
+      library.append(forYou);
+    }
+
+    const allTopics = createElement("section");
+    allTopics.className = "all-topics";
+    allTopics.setAttribute("aria-labelledby", "all-topics-heading");
+    const allTopicsHeading = createElement("h3", `All topics (${route.length})`);
+    allTopicsHeading.id = "all-topics-heading";
+    allTopics.append(allTopicsHeading);
+    appendStageGroups(allTopics, groups);
+    library.append(allTopics);
   }
 
   search.addEventListener("input", renderLibrary);

@@ -2,12 +2,14 @@ import { expect, test } from "@playwright/test";
 
 async function browseAllTopics(page) {
   await page.getByRole("button", { name: "Browse all topics" }).click();
-  await expect(page.locator(".route-library")).toBeVisible();
+  const allTopics = page.locator(".all-topics");
+  await expect(allTopics).toBeVisible();
+  return allTopics;
 }
 
 async function openRouteTopic(page, title) {
-  await browseAllTopics(page);
-  await page.getByRole("button", { name: `Open ${title}` }).click();
+  const allTopics = await browseAllTopics(page);
+  await allTopics.getByRole("button", { name: `Open ${title}` }).click();
 }
 
 async function openTailorEditor(page, intent) {
@@ -18,10 +20,10 @@ async function openTailorEditor(page, intent) {
 test("a learner can pin RAG, complete an API quiz, and retain progress", async ({ page }) => {
   await page.goto("./");
 
-  await browseAllTopics(page);
-  await page.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
+  const allTopics = await browseAllTopics(page);
+  await allTopics.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
   await expect(page.getByText("Retrieval-augmented generation is pinned.")).toBeVisible();
-  await page.getByRole("button", { name: "Open APIs" }).click();
+  await allTopics.getByRole("button", { name: "Open APIs" }).click();
   await page.getByRole("button", { name: "Start quiz" }).click();
 
   for (let questionIndex = 0; questionIndex < 3; questionIndex += 1) {
@@ -41,7 +43,10 @@ test("a learner can pin RAG, complete an API quiz, and retain progress", async (
 
   await page.reload();
   await browseAllTopics(page);
-  await expect(page.getByRole("button", { name: "Unpin Retrieval-augmented generation" })).toBeVisible();
+  await expect(page.locator(".all-topics").getByRole(
+    "button",
+    { name: "Unpin Retrieval-augmented generation" },
+  )).toBeVisible();
   await expect(page.getByText("Quiz complete: 3/3.")).toBeVisible();
 });
 
@@ -168,10 +173,13 @@ test("the live quiz renders its local recommendation while durable replay is pen
 
 test("pinning keeps focus on the replacement pin control", async ({ page }) => {
   await page.goto("./");
-  await browseAllTopics(page);
-  await page.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
+  const allTopics = await browseAllTopics(page);
+  await allTopics.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
 
-  await expect(page.getByRole("button", { name: "Unpin Retrieval-augmented generation" })).toBeFocused();
+  await expect(page.locator(".all-topics").getByRole(
+    "button",
+    { name: "Unpin Retrieval-augmented generation" },
+  )).toBeFocused();
 });
 
 test("quiz feedback and results receive predictable focus", async ({ page }) => {
@@ -204,8 +212,8 @@ test("unavailable browser storage is announced as session-only progress", async 
     });
   });
   await page.goto("./");
-  await browseAllTopics(page);
-  await page.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
+  const allTopics = await browseAllTopics(page);
+  await allTopics.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
 
   await expect(page.getByText(
     "Progress is available for this session only because it could not be saved locally.",

@@ -107,6 +107,24 @@
   gap: var(--space-2);
 }
 
+.today-active-lens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.today-active-lens p {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: 800;
+}
+
 .today-secondary-actions button {
   flex: 0 1 auto;
 }
@@ -180,6 +198,8 @@
 }
 
 .route-library-results,
+.route-for-you,
+.all-topics,
 .route-stage {
   display: grid;
   gap: var(--space-3);
@@ -190,6 +210,26 @@
   gap: var(--space-8);
 }
 
+.route-for-you {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.route-for-you h3,
+.all-topics > h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+}
+
+.all-topics {
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--color-border);
+}
+
 .route-stage h3 {
   margin: 0;
   font-family: var(--font-display);
@@ -197,7 +237,15 @@
   letter-spacing: -0.01em;
 }
 
-.route-list {
+.route-stage h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+}
+
+.route-list,
+.route-for-you-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
@@ -206,7 +254,8 @@
   list-style: none;
 }
 
-.route-list > li {
+.route-list > li,
+.route-for-you-list > li {
   display: flex;
   min-inline-size: 0;
 }
@@ -408,6 +457,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .route-for-you-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .focus-lens-intents {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -428,13 +481,15 @@
   .recommendation-card,
   .topic-card,
   .focus-lenses,
-  .route-library-controls {
+  .route-library-controls,
+  .route-for-you {
     padding: var(--space-4);
   }
 
   .route-library-controls,
   .focus-lens-intents,
-  .route-list {
+  .route-list,
+  .route-for-you-list {
     grid-template-columns: minmax(0, 1fr);
   }
 
