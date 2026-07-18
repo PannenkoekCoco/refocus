@@ -70,3 +70,33 @@ export function selectRouteView(topics, progress = {}, focus = {}) {
     };
   });
 }
+
+export const ROUTE_STAGES = Object.freeze([
+  { id: "foundations", title: "Foundations", categories: ["FOUNDATION"] },
+  { id: "build-and-ship", title: "Build and ship", categories: ["PRODUCTION"] },
+  { id: "ai-systems", title: "AI systems", categories: ["AI-SYSTEMS"] },
+]);
+
+export function selectTodayMomentum({ topics, progress, missions }) {
+  const appliedTopics = new Set((missions ?? []).flatMap((mission) => (
+    progress.missionStates?.[mission.id]?.status === "self_reviewed" ? [mission.topicId] : []
+  )));
+  return {
+    explored: new Set(progress.exploredLessonIds ?? []).size,
+    practised: Object.keys(progress.quizAttempts ?? {}).length,
+    applied: appliedTopics.size,
+    total: topics.length,
+  };
+}
+
+export function selectRouteGroups(route, { query = "", category = "all" } = {}) {
+  const needle = query.trim().toLocaleLowerCase();
+  const visible = route.filter((node) => (
+    (category === "all" || node.category === category)
+    && [node.title, node.summary].join(" ").toLocaleLowerCase().includes(needle)
+  ));
+  return ROUTE_STAGES.flatMap((stage) => {
+    const nodes = visible.filter((node) => stage.categories.includes(node.category));
+    return nodes.length ? [{ id: stage.id, title: stage.title, nodes }] : [];
+  });
+}

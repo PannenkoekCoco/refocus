@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   selectRecommendedTopic,
+  selectRouteGroups,
   selectRouteView,
+  selectTodayMomentum,
 } from "../static/js/state/selectors.js";
 
 test("a pinned topic wins over a job-relevant prerequisite", () => {
@@ -65,4 +67,25 @@ test("a route keeps starter topics selectable and prerequisites advisory", () =>
   assert.match(route[1].prerequisiteText, /Advisory prerequisite: Python\./);
   assert.equal(route[1].isPinned, true);
   assert.equal(route[1].isRecommended, true);
+});
+
+test("Today momentum counts explored, practised, and applied work", () => {
+  assert.deepEqual(selectTodayMomentum({
+    topics: [{ id: "python" }, { id: "apis" }],
+    progress: {
+      exploredLessonIds: ["python"],
+      quizAttempts: { python: { correct: 2, total: 3 } },
+      missionStates: { "api-service-v1": { status: "self_reviewed" } },
+    },
+    missions: [{ id: "api-service-v1", topicId: "apis" }],
+  }), { explored: 1, practised: 1, applied: 1, total: 2 });
+});
+
+test("route groups search title and summary without removing a free topic", () => {
+  const groups = selectRouteGroups([
+    { id: "apis", title: "APIs", summary: "Build a service", category: "FOUNDATION" },
+    { id: "docker", title: "Docker", summary: "Package an app", category: "PRODUCTION" },
+  ], { query: "service", category: "all" });
+
+  assert.equal(groups[0].nodes[0].id, "apis");
 });
