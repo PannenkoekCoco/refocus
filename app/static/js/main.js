@@ -13,12 +13,13 @@ import {
   pendingProgressKey,
   persistLearningState,
 } from "./state/store.js";
-import { selectRecommendedTopic, selectRouteView } from "./state/selectors.js";
-import { renderDashboard } from "./views/dashboard.js";
+import { selectRecommendedTopic, selectRouteView, selectTodayMomentum } from "./state/selectors.js";
+import { renderFocusLenses } from "./views/focus-lenses.js";
 import { renderLesson } from "./views/lesson.js";
 import { renderMission } from "./views/mission.js";
 import { renderQuiz } from "./views/quiz.js";
 import { renderRouteMap } from "./views/route-map.js";
+import { renderToday } from "./views/today.js";
 
 const app = document.querySelector("#app");
 const shellHeader = document.querySelector("#shell-header");
@@ -129,7 +130,7 @@ let progressSyncSnapshotScheduled = false;
 let focusLensDraft = null;
 
 function renderAfterProgressSync() {
-  if (currentView.name === "route") render();
+  if (["today", "route", "tailor"].includes(currentView.name)) render();
 }
 
 async function syncProgressPass({ hydrate }) {
@@ -232,19 +233,42 @@ function getPrerequisiteText(topicId) {
     ?? "No prerequisite is required; you can start here anytime.";
 }
 
-function renderShellHeader(recommendation) {
+function renderShellHeader(momentum) {
   shellHeader.replaceChildren();
   const inner = createElement("div");
   inner.className = "shell-inner";
+  const brand = createElement("div");
+  brand.className = "shell-brand";
   const title = createElement("h1", "Refocus");
   title.className = "shell-title";
   const copy = createElement("p", "An offline-first engineering learning route that stays in your control.");
   copy.className = "shell-copy";
-  inner.append(title, copy);
-  if (recommendation) {
-    const reason = createElement("p", recommendation.reason);
-    reason.className = "recommendation-reason";
-    inner.append(reason);
+  brand.append(title, copy);
+
+  const navigation = createElement("nav");
+  navigation.className = "app-navigation";
+  navigation.setAttribute("aria-label", "Learning views");
+  for (const { name, label, onClick } of [
+    { name: "today", label: "Today", onClick: showToday },
+    { name: "route", label: "Route", onClick: showRoute },
+    { name: "tailor", label: "Tailor", onClick: showTailor },
+  ]) {
+    const control = createElement("button", label);
+    control.type = "button";
+    control.className = "secondary";
+    if (currentView.name === name) control.setAttribute("aria-current", "page");
+    control.addEventListener("click", onClick);
+    navigation.append(control);
+  }
+
+  inner.append(brand, navigation);
+  if (momentum.total > 0) {
+    const progress = createElement(
+      "p",
+      `${momentum.explored} explored · ${momentum.practised} practised · ${momentum.applied} applied`,
+    );
+    progress.className = "shell-progress";
+    inner.append(progress);
   }
   shellHeader.append(inner);
 }
@@ -252,37 +276,69 @@ function renderShellHeader(recommendation) {
 function render({ moveFocus = false, focusTarget } = {}) {
   app.replaceChildren();
   const recommendation = topics.length > 0 ? getRecommendation() : null;
-  renderShellHeader(recommendation);
+  const momentum = selectTodayMomentum({
+    topics,
+    progress: store.getState(),
+    missions,
+  });
+  renderShellHeader(momentum);
 
   if (currentView.name === "loading") {
     renderLoading("Loading your learning route");
   } else if (currentView.name === "error") {
     renderLoading("Your learning route could not load offline.");
-  } else if (currentView.name === "route") {
-    renderDashboard({
+  } else if (currentView.name === "today") {
+    renderToday({
       container: app,
       recommendation,
+      momentum,
       onOpenTopic: openTopic,
-      topics,
-      lenses: focusLenses,
-      lensDraft: focusLensDraft,
+      onNavigate: (viewName) => {
+        if (viewName === "route") showRoute();
+        if (viewName === "tailor") showTailor();
+      },
       tts,
       onNarrationError: statusMessage.announce,
-      onPreview: (payload) => focusLensClient.preview(payload),
-      onApply: applyFocusLens,
-      onLensDraftChange: (nextDraft) => {
-        focusLensDraft = nextDraft;
-      },
-      onStatus: statusMessage.announce,
     });
+  } else if (currentView.name === "route") {
+    const routeLibrary = createElement("div");
+    routeLibrary.className = "route-library";
+    app.append(routeLibrary);
     renderRouteMap({
-      container: app,
+      container: routeLibrary,
       route: getRoute(),
       onPin: togglePin,
       onOpenTopic: openTopic,
       tts,
       onNarrationError: statusMessage.announce,
     });
+  } else if (currentView.name === "tailor") {
+    const tailorView = createElement("section");
+    tailorView.className = "tailor-view";
+    tailorView.setAttribute("aria-labelledby", "tailor-heading");
+    const heading = createElement("h2", "Tailor your route");
+    heading.id = "tailor-heading";
+    const copy = createElement(
+      "p",
+      "Choose a role or goal when you want a more personalised suggestion. Every topic stays open.",
+    );
+    copy.className = "screen-copy";
+    tailorView.append(heading, copy);
+    renderFocusLenses({
+      container: tailorView,
+      topics,
+      lenses: focusLenses,
+      draft: focusLensDraft,
+      tts,
+      onNarrationError: statusMessage.announce,
+      onPreview: (payload) => focusLensClient.preview(payload),
+      onApply: applyFocusLens,
+      onDraftChange: (nextDraft) => {
+        focusLensDraft = nextDraft;
+      },
+      onStatus: statusMessage.announce,
+    });
+    app.append(tailorView);
   } else if (currentView.name === "lesson") {
     renderLesson({
       container: app,
@@ -352,8 +408,18 @@ function togglePin(topic) {
   });
 }
 
+function showToday() {
+  currentView = { name: "today" };
+  render({ moveFocus: true });
+}
+
 function showRoute() {
   currentView = { name: "route" };
+  render({ moveFocus: true });
+}
+
+function showTailor() {
+  currentView = { name: "tailor" };
   render({ moveFocus: true });
 }
 
@@ -522,7 +588,7 @@ async function loadSavedFocusLenses() {
       store.dispatch({ type: "applyFocusLens", kind, skills: activeLens.skills });
     }
   }
-  if (currentView.name === "route") render();
+  if (["today", "route", "tailor"].includes(currentView.name)) render();
 }
 
 async function start() {
@@ -530,7 +596,7 @@ async function start() {
   try {
     const fetchImpl = window.fetch.bind(window);
     [topics, missions] = await Promise.all([loadTopics(fetchImpl), loadMissions(fetchImpl)]);
-    currentView = { name: "route" };
+    currentView = { name: "today" };
     render();
     progressSyncReady = true;
     void syncProgress({ hydrate: true });

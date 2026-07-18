@@ -158,8 +158,25 @@ async function expectSpokenText(page, text) {
 }
 
 async function openRouteTopic(page, topicId, actionName) {
+  await showRoute(page);
   const card = page.locator(`.topic-card[data-topic-id="${topicId}"]`);
   await card.getByRole("button", { name: actionName }).click();
+}
+
+async function showRoute(page) {
+  const routeLibrary = page.locator(".route-library");
+  if (await routeLibrary.count() === 0) {
+    await page.getByRole("button", { name: "Route", exact: true }).click();
+  }
+  await expect(routeLibrary).toBeVisible();
+}
+
+async function showTailor(page) {
+  const tailorView = page.locator(".tailor-view");
+  if (await tailorView.count() === 0) {
+    await page.getByRole("button", { name: "Tailor", exact: true }).click();
+  }
+  await expect(tailorView).toBeVisible();
 }
 
 async function completeCurrentQuizWithCorrectBAnswers(page) {
@@ -171,9 +188,46 @@ async function completeCurrentQuizWithCorrectBAnswers(page) {
   }
 }
 
+test("Today offers one next learning action before route browsing", async ({ page }) => {
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+
+  await expect(page.locator(".today-view")).toBeVisible();
+  await expect(page.locator(".today-view .today-primary-action")).toHaveCount(1);
+  await expect(page.locator(".today-view .momentum-grid > *")).toHaveCount(3);
+  await expect(page.locator(".today-view .recommendation-reason")).toBeVisible();
+  await expect(page.locator(".today-view .topic-card")).toHaveCount(0);
+  await expect(page.locator(".today-view textarea")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Browse all topics" })).toHaveClass(/secondary/);
+  await expect(page.getByRole("button", { name: "Tailor my route" })).toHaveClass(/secondary/);
+
+  await page.getByRole("button", { name: "Browse all topics" }).click();
+  await expect(page.locator(".route-library .topic-card")).toHaveCount(14);
+});
+
+test("the header navigates explicitly between Today, Route, and Tailor", async ({ page }) => {
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+
+  const navigation = page.getByRole("navigation", { name: "Learning views" });
+  await expect(navigation.getByRole("button")).toHaveText(["Today", "Route", "Tailor"]);
+  await expect(navigation.getByRole("button", { name: "Today" })).toHaveAttribute("aria-current", "page");
+
+  await navigation.getByRole("button", { name: "Route" }).click();
+  await expect(page.locator(".route-library")).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Route" })).toHaveAttribute("aria-current", "page");
+  await expect(navigation.getByRole("button", { name: "Today" })).not.toHaveAttribute("aria-current");
+
+  await navigation.getByRole("button", { name: "Tailor" }).click();
+  await expect(page.locator(".tailor-view")).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Tailor" })).toHaveAttribute("aria-current", "page");
+});
+
 test("all fourteen topics stay free while an advanced pin remains recommended with advisory prerequisites", async ({ page }) => {
   await mockInitialBrowserApis(page);
   await page.goto("/");
+
+  await page.getByRole("button", { name: "Browse all topics" }).click();
 
   const cards = page.locator(".topic-card");
   await expect(cards).toHaveCount(14);
@@ -186,12 +240,12 @@ test("all fourteen topics stay free while an advanced pin remains recommended wi
   const ragCard = page.locator('.topic-card[data-topic-id="retrieval-augmented-generation"]');
   await ragCard.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
 
-  await expect(page.locator(".recommendation-card")).toContainText("Retrieval-augmented generation");
-  await expect(page.locator(".recommendation-card")).toContainText(
-    "Advisory prerequisite: APIs, SQL. You can start here anytime.",
-  );
-  await expect(page.getByText("You pinned this topic.", { exact: true }).first()).toBeVisible();
+  await expect(ragCard).toContainText("Advisory prerequisite: APIs, SQL. You can start here anytime.");
   await expect(ragCard.getByRole("button", { name: "Unpin Retrieval-augmented generation" })).toBeFocused();
+  await page.getByRole("button", { name: "Today" }).click();
+
+  await expect(page.locator(".recommendation-card")).toContainText("Retrieval-augmented generation");
+  await expect(page.getByText("You pinned this topic.", { exact: true }).first()).toBeVisible();
 });
 
 test("a Python lesson falls back to browser speech and keeps a locally saved quiz route navigable", async ({ page }) => {
@@ -227,12 +281,13 @@ test("narration coverage speaks route guidance, practical actions, mission evide
   await mockInitialBrowserApis(page);
   await page.goto("/");
 
-  await page.locator(".dashboard > .narrator").getByRole("button", { name: "Listen" }).click();
+  await page.locator(".today-view > .narrator").getByRole("button", { name: "Listen" }).click();
   await expectSpokenText(
     page,
-    "Your flexible route. Start anywhere. Recommendations are guidance, never a lock or a prerequisite gate. Suggested next. Python beyond scripts. Recommended from your goals and current mastery. No prerequisite is required; you can start here anytime. Turn scripts into maintainable, testable modules.",
+    "Today. Your next learning action. Suggested next: Python beyond scripts. Recommended from your goals and current mastery. Turn scripts into maintainable, testable modules. Your momentum: 0 explored, 0 practised, and 0 applied out of 14 topics. Browse all topics or tailor your route whenever you want.",
   );
 
+  await showRoute(page);
   await page.locator(".route-map-header > .narrator").getByRole("button", { name: "Listen" }).click();
   await expectSpokenText(
     page,
@@ -311,6 +366,7 @@ test("status narration leaves pin feedback visible when no provider is available
   await mockInitialBrowserApis(page);
   await page.goto("/");
 
+  await showRoute(page);
   const ragCard = page.locator('.topic-card[data-topic-id="retrieval-augmented-generation"]');
   await ragCard.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
 
@@ -456,6 +512,7 @@ test("keyboard focus, polite status, and the route grid work at mobile and deskt
 
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip to learning route" })).toBeFocused();
+  await showRoute(page);
   const ragCard = page.locator('.topic-card[data-topic-id="retrieval-augmented-generation"]');
   const pin = ragCard.getByRole("button", { name: "Pin Retrieval-augmented generation" });
   await pin.focus();
@@ -581,6 +638,7 @@ test("offline progress sync hydrates once, acknowledges only delivered work, and
     },
   ]);
 
+  await showRoute(page);
   const pythonCard = page.locator('.topic-card[data-topic-id="python-beyond-scripts"]');
   await expect(pythonCard).toContainText("Quiz complete: 1/3.");
   await openRouteTopic(page, "apis", "Open APIs");
@@ -690,7 +748,7 @@ test("startup progress sync absorbs an early online event without repeating the 
   await page.waitForTimeout(100);
   releaseTopics();
 
-  await expect(page.getByRole("heading", { name: "Your flexible route" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
   await expect.poll(() => snapshotRequests).toBe(1);
   await expect.poll(() => replayWrites).toBe(1);
   await page.waitForTimeout(150);
@@ -733,6 +791,7 @@ test("online hydration preserves an unapplied focus-lens draft without caching i
     localStorage.getItem("engineeringLearningRoute.v1"),
   ).exploredLessonIds.includes("sql"))).toBe(true);
 
+  await showTailor(page);
   const jobDescription = page.getByRole("textbox", { name: "Job description" });
   await jobDescription.fill(privateDraft);
   await page.getByRole("button", { name: "Preview skills" }).click();

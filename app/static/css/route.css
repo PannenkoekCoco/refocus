@@ -1,11 +1,13 @@
-.dashboard,
-.route-map {
+.today-view,
+.route-map,
+.tailor-view {
   display: grid;
   gap: var(--space-5);
 }
 
-.dashboard {
-  margin-bottom: var(--space-8);
+.today-view,
+.tailor-view {
+  max-width: 58rem;
 }
 
 .recommendation-card,
@@ -21,6 +23,57 @@
   gap: var(--space-3);
   padding: var(--space-5);
   border-color: var(--color-accent);
+}
+
+.recommendation-reason {
+  margin: 0;
+  color: var(--color-accent-strong);
+  font-weight: 700;
+}
+
+.today-primary-action {
+  inline-size: 100%;
+}
+
+.today-momentum {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.today-momentum h3 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.momentum-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.momentum-item {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+}
+
+.momentum-item strong {
+  font-size: 1.25rem;
+}
+
+.momentum-item span {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.today-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .recommendation-card h3,
