@@ -196,10 +196,15 @@ test("Today offers one next learning action before route browsing", async ({ pag
   await expect(page.locator(".today-view .today-primary-action")).toHaveCount(1);
   await expect(page.locator(".today-view .momentum-grid > *")).toHaveCount(3);
   await expect(page.locator(".today-view .recommendation-reason")).toBeVisible();
-  await expect(page.locator(".today-view .topic-card")).toHaveCount(0);
-  await expect(page.locator(".today-view textarea")).toHaveCount(0);
+  await expect(page.locator(".topic-card")).toHaveCount(0);
+  await expect(page.locator("textarea")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Browse all topics" })).toHaveClass(/secondary/);
-  await expect(page.getByRole("button", { name: "Tailor my route" })).toHaveClass(/secondary/);
+  const tailor = page.getByRole("button", { name: "Tailor my route" });
+  await expect(tailor).toHaveClass(/secondary/);
+
+  await tailor.click();
+  await expect(page.locator(".tailor-view")).toBeVisible();
+  await page.getByRole("button", { name: "Today", exact: true }).click();
 
   await page.getByRole("button", { name: "Browse all topics" }).click();
   await expect(page.locator(".route-library .topic-card")).toHaveCount(14);
