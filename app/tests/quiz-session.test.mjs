@@ -2,6 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createQuizSession } from "../static/js/services/quiz-session.js";
 
+test("quiz session reports the current question position", () => {
+  const session = createQuizSession([
+    { id: "q1", answerIndex: 0, options: ["a", "b"] },
+    { id: "q2", answerIndex: 1, options: ["a", "b"] },
+  ]);
+
+  assert.deepEqual(session.position(), { current: 1, total: 2 });
+  session.answer(0);
+  session.next();
+  assert.deepEqual(session.position(), { current: 2, total: 2 });
+});
+
 test("quiz results include immediate answer feedback", () => {
   const session = createQuizSession([{ id: "q1", answerIndex: 1, options: ["a", "b"] }]);
 

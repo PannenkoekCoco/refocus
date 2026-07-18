@@ -50,6 +50,44 @@
   margin: 0;
 }
 
+.learning-loop,
+.learning-stepper-group {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.learning-stepper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.learning-stepper li {
+  min-height: 2.75rem;
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-weight: 700;
+  text-align: center;
+}
+
+.learning-stepper li.is-active {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-surface);
+}
+
+.learning-step-detail {
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
 .narrator {
   display: flex;
   align-items: center;

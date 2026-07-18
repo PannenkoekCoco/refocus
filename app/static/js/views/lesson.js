@@ -1,4 +1,5 @@
 import { renderNarrator } from "../components/narrator.js";
+import { renderLearningStepper } from "../components/learning-stepper.js";
 
 function createElement(tagName, text) {
   const element = document.createElement(tagName);
@@ -15,6 +16,7 @@ export function renderLesson({
   onNarrationError,
   onBack,
   onStartQuiz,
+  onCompleteStarter,
 }) {
   const screen = createElement("section");
   screen.className = "learning-screen";
@@ -34,6 +36,9 @@ export function renderLesson({
   label.className = "eyebrow";
   const heading = createElement("h2", topic.title);
   heading.id = "lesson-heading";
+  const learningLoop = createElement("div");
+  learningLoop.className = "learning-loop";
+  renderLearningStepper({ container: learningLoop, active: "learn" });
   const summary = createElement("p", topic.summary);
   const prerequisite = createElement("p", prerequisiteText);
   prerequisite.className = "advisory";
@@ -45,7 +50,7 @@ export function renderLesson({
     tts,
     onError: onNarrationError,
   });
-  card.append(label, heading, summary, prerequisite, narrator);
+  card.append(label, heading, learningLoop, summary, prerequisite, narrator);
 
   screen.append(backRow, card);
 
@@ -75,7 +80,18 @@ export function renderLesson({
       onError: onNarrationError,
     });
     practice.append(practiceHeading, practiceCopy, practiceNarrator);
-    screen.append(overview, practice);
+    const completeStarter = createElement("button", "I tried this step");
+    completeStarter.type = "button";
+    completeStarter.addEventListener("click", async () => {
+      completeStarter.disabled = true;
+      try {
+        const completed = await onCompleteStarter(topic);
+        if (!completed) completeStarter.disabled = false;
+      } catch {
+        completeStarter.disabled = false;
+      }
+    });
+    screen.append(overview, practice, completeStarter);
     container.append(screen);
     return;
   }

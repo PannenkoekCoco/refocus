@@ -4,6 +4,7 @@ export function createQuizSession(questions) {
 
   return {
     current: () => questions[index] ?? null,
+    position: () => ({ current: index + 1, total: questions.length }),
     answer(choiceIndex) {
       const question = questions[index];
       const correct = choiceIndex === question.answerIndex;

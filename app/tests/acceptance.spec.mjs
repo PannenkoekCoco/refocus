@@ -347,6 +347,85 @@ test("all fourteen topics stay free while an advanced pin remains recommended", 
   await expect(page.getByText("You pinned this topic.", { exact: true }).first()).toBeVisible();
 });
 
+test("lesson and quiz show the Learn Check Apply loop", async ({ page }) => {
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+
+  await openRouteTopic(page, "apis", "Open APIs");
+  const stepper = page.locator(".learning-stepper");
+  await expect(stepper).toHaveAttribute("aria-label", "Learning progress");
+  await expect(stepper.locator("li")).toHaveText(["Learn", "Check", "Apply"]);
+  await expect(stepper.locator(".is-active")).toHaveCount(1);
+  await expect(stepper.locator(".is-active")).toHaveText("Learn");
+
+  await page.getByRole("button", { name: "Start quiz" }).click();
+  await expect(page.getByText("Question 1 of 3", { exact: true })).toBeVisible();
+  await expect(stepper.locator(".is-active")).toHaveCount(1);
+  await expect(stepper.locator(".is-active")).toHaveText("Check");
+
+  await page.getByRole("button", { name: /^B\./ }).click();
+  await page.getByRole("button", { name: "Next question" }).click();
+  await expect(page.getByText("Question 2 of 3", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: /^B\./ }).click();
+  await page.getByRole("button", { name: "Next question" }).click();
+  await expect(page.getByText("Question 3 of 3", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /^B\./ }).click();
+  await page.getByRole("button", { name: "See results" }).click();
+
+  await expect(stepper.locator(".is-active")).toHaveCount(1);
+  await expect(stepper.locator(".is-active")).toHaveText("Apply");
+  await expect(page.getByRole("button", { name: "Ship a small API service" })).toBeVisible();
+});
+
+test("starter completion saves completed progress and returns to Today", async ({ page }) => {
+  const progressWrites = [];
+  await mockInitialBrowserApis(page);
+  await page.route("**/api/progress/**", async (route) => {
+    progressWrites.push({
+      path: new URL(route.request().url()).pathname,
+      body: route.request().postDataJSON(),
+    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.goto("/");
+
+  await openRouteTopic(page, "docker", "Explore now Docker");
+  await expect(page.getByRole("button", { name: "I tried this step" })).toBeVisible();
+  await page.getByRole("button", { name: "I tried this step" }).click();
+
+  await expect(page.locator(".today-view")).toBeVisible();
+  await expect(page.locator("#status-message")).toContainText(
+    "Docker is marked complete and will sync when you're online.",
+  );
+  await expect.poll(() => progressWrites.some(({ path, body }) => (
+    path === "/api/progress/topic/docker" && body?.status === "completed"
+  ))).toBe(true);
+});
+
+test("starter completion stays open when progress cannot be queued", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(key, value) {
+      if (key === "engineeringLearningRoute.v1") throw new Error("storage blocked");
+      return originalSetItem.call(this, key, value);
+    };
+  });
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+
+  await openRouteTopic(page, "docker", "Explore now Docker");
+  const completeStarter = page.getByRole("button", { name: "I tried this step" });
+  await completeStarter.click();
+
+  await expect(page.getByRole("heading", { name: "Docker" })).toBeVisible();
+  await expect(page.locator(".today-view")).toHaveCount(0);
+  await expect(page.locator("#status-message")).toHaveText(
+    "Progress could not be saved locally. It is available for this session only.",
+  );
+  await expect(completeStarter).toBeEnabled();
+});
+
 test("a Python lesson falls back to browser speech and keeps a locally saved quiz route navigable", async ({ page }) => {
   await installBrowserSpeechFallback(page);
   await mockInitialBrowserApis(page);

@@ -1,4 +1,5 @@
 import { renderNarrator } from "../components/narrator.js";
+import { renderLearningStepper } from "../components/learning-stepper.js";
 import { createQuizSession } from "../services/quiz-session.js";
 
 function createElement(tagName, text) {
@@ -63,6 +64,12 @@ export function renderQuiz({
     ].filter(Boolean).join(" ");
     const label = createElement("p", labelText);
     label.className = "eyebrow";
+    const learningLoop = createElement("div");
+    learningLoop.className = "learning-loop";
+    renderLearningStepper({
+      container: learningLoop,
+      active: authoredMissions.length > 0 ? "apply" : "check",
+    });
     const heading = createElement("h2", headingText);
     heading.id = "quiz-result-heading";
     const copy = createElement("p", copyText);
@@ -95,7 +102,7 @@ export function renderQuiz({
     back.className = authoredMissions.length > 0 ? "secondary" : "";
     back.addEventListener("click", onBackToRoute);
     actions.append(back);
-    card.append(label, heading, copy, resultNarrator);
+    card.append(label, learningLoop, heading, copy, resultNarrator);
     if (suggestedNext) card.append(suggestedNext);
     if (authoredMissions.length > 0) card.append(missionChoices);
     card.append(actions);
@@ -122,6 +129,14 @@ export function renderQuiz({
     card.className = "quiz-card";
     const label = createElement("p", `${topic.title} quiz`);
     label.className = "eyebrow";
+    const position = session.position();
+    const learningLoop = createElement("div");
+    learningLoop.className = "learning-loop";
+    renderLearningStepper({
+      container: learningLoop,
+      active: "check",
+      detail: "Question " + position.current + " of " + position.total,
+    });
     const heading = createElement("h2", question.prompt);
     heading.id = "quiz-heading";
     const narrator = createElement("div");
@@ -196,7 +211,7 @@ export function renderQuiz({
       options.append(answer);
     });
 
-    card.append(label, heading, narrator, options);
+    card.append(label, learningLoop, heading, narrator, options);
     screen.append(backRow, card);
     container.append(screen);
     focusElement(heading);

@@ -78,6 +78,7 @@ const storage = getBrowserStorage();
 const store = createStore(loadLearningState(storage));
 let latestPersistenceSucceeded = true;
 let pendingProgressGeneration = 0;
+let pendingQueueObserver = null;
 store.subscribe((state) => {
   latestPersistenceSucceeded = persistLearningState(storage, state);
 });
@@ -93,7 +94,9 @@ function queuePendingProgress(record) {
   const isQueued = (nextState.pendingProgress ?? []).some((candidate) => (
     pendingProgressKey(candidate) === progressKey
   ));
-  if (!isQueued || !latestPersistenceSucceeded) return false;
+  const queued = isQueued && latestPersistenceSucceeded;
+  if (pendingQueueObserver?.key === progressKey) pendingQueueObserver.queued = queued;
+  if (!queued) return false;
   if (!wasQueued) pendingProgressGeneration += 1;
   return true;
 }
@@ -352,6 +355,7 @@ function render({ moveFocus = false, focusTarget } = {}) {
       onNarrationError: statusMessage.announce,
       onBack: showRoute,
       onStartQuiz: () => showQuiz(currentView.topic, currentView.lesson),
+      onCompleteStarter: completeStarter,
     });
   } else if (currentView.name === "quiz") {
     const topicMissions = missions.filter((candidate) => candidate.topicId === currentView.topic.id);
@@ -459,6 +463,36 @@ async function openTopic(node) {
 function showQuiz(topic, lesson) {
   currentView = { name: "quiz", topic, lesson };
   render({ moveFocus: true });
+}
+
+async function saveStarterCompletion(topic) {
+  const key = pendingProgressKey({
+    kind: "topicProgress",
+    payload: { topicId: topic.id, status: "completed" },
+  });
+  if (!key) return false;
+
+  const outcome = { key, queued: false };
+  pendingQueueObserver = outcome;
+  try {
+    await progressClient.saveTopicProgress(topic.id, "completed");
+    return outcome.queued;
+  } finally {
+    if (pendingQueueObserver === outcome) pendingQueueObserver = null;
+  }
+}
+
+async function completeStarter(topic) {
+  try {
+    const saved = await saveStarterCompletion(topic);
+    if (!saved) return false;
+  } catch {
+    statusMessage.announce("That step could not be marked complete right now. Try again.");
+    return false;
+  }
+  statusMessage.announce(topic.title + " is marked complete and will sync when you're online.");
+  showToday();
+  return true;
 }
 
 async function saveQuiz(result) {
