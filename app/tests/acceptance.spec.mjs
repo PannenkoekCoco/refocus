@@ -228,7 +228,32 @@ test("the header navigates explicitly between Today, Route, and Tailor", async (
   await expect(navigation.getByRole("button", { name: "Tailor" })).toHaveAttribute("aria-current", "page");
 });
 
-test("all fourteen topics stay free while an advanced pin remains recommended with advisory prerequisites", async ({ page }) => {
+test("the route library filters topics without hiding free navigation", async ({ page }) => {
+  await mockInitialBrowserApis(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Browse all topics" }).click();
+
+  for (const filterName of ["All", "Foundations", "Build and ship", "AI systems"]) {
+    await expect(page.getByRole("button", { name: filterName, exact: true })).toBeVisible();
+  }
+  await page.getByLabel("Search topics").fill("Docker");
+  await expect(page.locator(".route-library .topic-card")).toHaveCount(1);
+  const dockerCard = page.locator('.topic-card[data-topic-id="docker"]');
+  await expect(dockerCard.locator(".topic-open")).toHaveCount(1);
+  await expect(dockerCard.locator(".topic-pin")).toHaveCount(1);
+  await expect(dockerCard.locator(".narrator")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Explore now Docker" })).toBeEnabled();
+
+  await page.getByLabel("Search topics").fill("");
+  await page.getByRole("button", { name: "AI systems" }).click();
+  await expect(page.locator(".route-library .route-stage")).toHaveCount(1);
+  await expect(page.locator(".route-library .topic-card")).toHaveCount(3);
+
+  await page.getByRole("button", { name: "Back to Today" }).click();
+  await expect(page.locator(".today-view")).toBeVisible();
+});
+
+test("all fourteen topics stay free while an advanced pin remains recommended", async ({ page }) => {
   await mockInitialBrowserApis(page);
   await page.goto("/");
 
@@ -239,15 +264,19 @@ test("all fourteen topics stay free while an advanced pin remains recommended wi
   for (let index = 0; index < 14; index += 1) {
     const card = cards.nth(index);
     await expect(card).toBeVisible();
+    await expect(card.locator(".topic-pin")).toHaveCount(1);
+    await expect(card.locator(".topic-open")).toHaveCount(1);
     await expect(card.getByRole("button", { name: /^(Open|Explore now)/ })).toBeEnabled();
   }
 
   const ragCard = page.locator('.topic-card[data-topic-id="retrieval-augmented-generation"]');
   await ragCard.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
 
-  await expect(ragCard).toContainText("Advisory prerequisite: APIs, SQL. You can start here anytime.");
+  await expect(ragCard).toContainText("AI systems");
+  await expect(ragCard.locator(".advisory")).toHaveCount(0);
+  await expect(ragCard.locator(".narrator")).toHaveCount(0);
   await expect(ragCard.getByRole("button", { name: "Unpin Retrieval-augmented generation" })).toBeFocused();
-  await page.getByRole("button", { name: "Today" }).click();
+  await page.getByRole("button", { name: "Today", exact: true }).click();
 
   await expect(page.locator(".recommendation-card")).toContainText("Retrieval-augmented generation");
   await expect(page.getByText("You pinned this topic.", { exact: true }).first()).toBeVisible();
@@ -300,11 +329,7 @@ test("narration coverage speaks route guidance, practical actions, mission evide
   );
 
   const ragCard = page.locator('.topic-card[data-topic-id="retrieval-augmented-generation"]');
-  await ragCard.locator(".narrator").getByRole("button", { name: "Listen" }).click();
-  await expectSpokenText(
-    page,
-    "Retrieval-augmented generation. Starter exploration. ai-systems. Ground answers in retrieved, attributable information. Starter exploration available. Advisory prerequisite: APIs, SQL. You can start here anytime.",
-  );
+  await expect(ragCard.locator(".narrator")).toHaveCount(0);
 
   await ragCard.getByRole("button", { name: "Pin Retrieval-augmented generation" }).click();
   await expectSpokenText(page, "Retrieval-augmented generation is pinned.");
@@ -526,16 +551,17 @@ test("keyboard focus, polite status, and the route grid work at mobile and deskt
   await expect(page.locator("#status-message")).toHaveAttribute("aria-live", "polite");
   await expect(page.locator("#status-message")).toHaveText("Retrieval-augmented generation is pinned.");
 
-  const mobileColumns = await page.locator(".route-list").evaluate((element) => (
+  const routeLists = page.locator(".route-stage .route-list");
+  const mobileColumns = await routeLists.evaluateAll((elements) => elements.map((element) => (
     getComputedStyle(element).gridTemplateColumns.split(" ").length
-  ));
-  expect(mobileColumns).toBe(1);
+  )));
+  expect(mobileColumns).toEqual([1, 1, 1]);
 
   await page.setViewportSize({ width: 1280, height: 900 });
-  const desktopColumns = await page.locator(".route-list").evaluate((element) => (
+  const desktopColumns = await routeLists.evaluateAll((elements) => elements.map((element) => (
     getComputedStyle(element).gridTemplateColumns.split(" ").length
-  ));
-  expect(desktopColumns).toBe(3);
+  )));
+  expect(desktopColumns).toEqual([3, 3, 3]);
 });
 
 test("offline progress sync hydrates once, acknowledges only delivered work, and keeps a local mission reflection", async ({ page }) => {

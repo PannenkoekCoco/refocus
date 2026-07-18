@@ -309,6 +309,7 @@ function render({ moveFocus = false, focusTarget } = {}) {
       route: getRoute(),
       onPin: togglePin,
       onOpenTopic: openTopic,
+      onBack: showToday,
       tts,
       onNarrationError: statusMessage.announce,
     });

@@ -97,6 +97,61 @@
   font-size: 1.375rem;
 }
 
+.route-back {
+  justify-self: start;
+}
+
+.route-library-controls {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.route-search {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.route-search label {
+  font-weight: 800;
+}
+
+.route-search input {
+  inline-size: min(100%, 36rem);
+  min-block-size: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.route-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.route-filters button[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  color: var(--color-accent-strong);
+}
+
+.route-library-results,
+.route-stage {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.route-stage h3 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
 .route-list {
   display: grid;
   gap: var(--space-4);
@@ -107,8 +162,8 @@
 
 .topic-card {
   display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-3);
 }
 
 .topic-card.is-pinned {
@@ -122,17 +177,23 @@
 
 .topic-card-header,
 .topic-card-actions,
-.badge-row {
+.badge-row,
+.topic-meta {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
 .topic-card-header {
+  align-items: flex-start;
   justify-content: space-between;
 }
 
 .badge-row {
+  flex-wrap: wrap;
+}
+
+.topic-meta {
   flex-wrap: wrap;
 }
 
@@ -163,22 +224,33 @@
   color: #075f37;
 }
 
-.topic-summary,
-.advisory,
 .topic-status {
   color: var(--color-text-muted);
 }
 
-.advisory {
-  font-size: 0.9375rem;
-}
-
 .topic-status {
+  font-size: 0.9375rem;
   font-weight: 700;
 }
 
 .topic-card-actions {
   flex-wrap: wrap;
+}
+
+.topic-pin {
+  flex: 0 0 auto;
+}
+
+.topic-open {
+  inline-size: 100%;
+}
+
+.route-empty {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
 }
 
 .focus-lenses {
