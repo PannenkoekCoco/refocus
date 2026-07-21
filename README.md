@@ -85,3 +85,7 @@ Refocus uses a GitHub App user-to-server authorization flow, not a GitHub OAuth 
 The server keeps only a short-lived callback transaction, a stable GitHub user ID, and a snapshot of selectable repositories. It never stores browser-facing or GitHub access tokens. Repository verification requires a fresh GitHub authorization (15 minutes by default), has a per-user cooldown, and uses fixed-host, read-only requests only. The launcher and image disable Uvicorn access logs because callback URLs can contain OAuth values; any reverse proxy must likewise redact query strings for `/api/auth/github/callback` and respect its no-store response headers.
 
 An existing signed-in Refocus user is linked through the short-lived OAuth transaction to the stable GitHub ID, preserving that user's learning data without comparing mutable GitHub logins. If no current Refocus session is available, Refocus deliberately does not infer an account merge from a GitHub username.
+
+## License
+
+Released under the [MIT License](LICENSE). © 2026 Joey Beumer.
